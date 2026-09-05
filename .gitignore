@@ -1,0 +1,38 @@
+# Внутрішні документи не потрапляють у репозиторій.
+# Правило стоїть від першого коміту: пізніше знадобився б git rm --cached,
+# а в запушеному репо — переписування історії.
+*.md
+!README.md
+
+# Секрети
+.env
+.env.*
+!.env.example
+*.local
+
+# Ключі — окремими рядками, а не через загальне правило по *.json:
+# ключ програми невідновний, без нього задеплоєну програму неможливо оновити.
+*.keypair.json
+*-keypair.json
+id.json
+*.pem
+# Тека, яку .env.example пропонує під операторський ключ і ключі вузлів
+.secrets/
+
+# Збірка й залежності
+node_modules/
+dist/
+build/
+coverage/
+target/
+.anchor/
+test-ledger/
+.vercel/
+*.tsbuildinfo
+
+# Логи й дампи
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+.DS_Store
