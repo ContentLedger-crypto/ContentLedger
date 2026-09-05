@@ -1,0 +1,33 @@
+[package]
+name = "contentledger"
+version = "0.1.0"
+edition = "2021"
+description = "On-chain licence registry, escrow and royalty settlement"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "contentledger"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+anchor-debug = []
+custom-heap = []
+custom-panic = []
+
+# Макроси anchor і solana-крейти світять cfg, яких у нашому Cargo.toml немає;
+# без цього блоку clippy з -D warnings падає на чужому згенерованому коді.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
+
+[dependencies]
+anchor-lang = "0.32.1"
+
+[dev-dependencies]
+mollusk-svm = "=0.15.0"
+solana-instruction = "3.4"
+solana-pubkey = "4.2"
