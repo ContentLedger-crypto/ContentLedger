@@ -10,10 +10,15 @@
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "test": "pnpm -r --parallel test",
-    "typecheck": "pnpm -r --parallel typecheck"
+    "typecheck": "pnpm -r --parallel typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "gate": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.12",
     "@types/node": "26.4.1",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
   }
 }
