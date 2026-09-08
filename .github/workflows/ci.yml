@@ -1,0 +1,58 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Без `version:` навмисно — pnpm/action-setup@v4 падає з "Multiple versions
+      # of pnpm specified", якщо у package.json є поле packageManager. Воно
+      # точніше (9.15.0) і його ж читає corepack локально.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Та сама команда, що й локально: два описи гейта розходяться, один — ні.
+      - run: pnpm gate
+
+  program:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/program
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.local/share/solana
+            packages/program/target
+          key: solana-${{ hashFiles('packages/program/Cargo.lock', 'packages/program/rust-toolchain.toml', 'packages/program/Anchor.toml') }}
+          restore-keys: solana-
+
+      - name: Agave
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v4.2.0/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: anchor-cli
+        # Із кореня, а не з packages/program: там rust-toolchain.toml пінить
+        # 1.97.1 під програму, і збирати ним ще й anchor-cli — зайвий зв'язок.
+        working-directory: .
+        run: |
+          if ! command -v anchor >/dev/null; then
+            cargo install anchor-cli --version 0.32.1 --locked
+          fi
+
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: anchor build
+      # Тільки після anchor build: mollusk вантажить contentledger.so з SBF_OUT_DIR,
+      # а до збірки його не існує.
+      - run: SBF_OUT_DIR=$PWD/target/deploy cargo test --manifest-path programs/contentledger/Cargo.toml
