@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  ContentLedger — a dark, spacious, serif reading surface.
+  Warm off-white ink on a cool near-black ground. No web fonts: every family
+  below resolves locally on the reader's machine.
+*/
+
+@layer base {
+  :root {
+    --ground: #101317;
+    --lifted: #151a20;
+    --ink: #e8e3d9;
+    --muted: #8a9099;
+    --hairline: #232830;
+    --sage: #8fb3a3;
+    --terracotta: #c4795f;
+
+    --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --font-sans: ui-sans-serif, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+
+  html,
+  body,
+  #root {
+    background-color: var(--ground);
+  }
+
+  body {
+    color: var(--ink);
+    font-family: var(--font-serif);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: rgba(143, 179, 163, 0.25);
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--sage);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .serif {
+    font-family: var(--font-serif);
+  }
+
+  /* Every figure. Old-style numerals in the serif stacks will not align in a
+     money column, so figures are set in the sans with tabular lining numerals. */
+  .fig {
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums lining-nums;
+    text-align: right;
+    letter-spacing: 0.01em;
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0;
+  }
+
+  .smallcaps {
+    font-family: var(--font-serif);
+    font-variant: small-caps;
+    letter-spacing: 0.08em;
+  }
+
+  .navitem {
+    font-family: var(--font-serif);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .rule {
+    border-top: 1px solid var(--hairline);
+  }
+}
+
+/* The only entrance in the app: an arriving taking. 240ms, then never again. */
+@keyframes rowEnter {
+  from {
+    opacity: 0;
+    height: 0;
+  }
+  to {
+    opacity: 1;
+    height: 56px;
+  }
+}
+
+@keyframes rowEnterStacked {
+  from {
+    opacity: 0;
+    height: 0;
+  }
+  to {
+    opacity: 1;
+    height: 104px;
+  }
+}
+
+.row-enter {
+  animation: rowEnter 240ms ease-out;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .row-enter {
+    animation-name: rowEnterStacked;
+  }
+}
