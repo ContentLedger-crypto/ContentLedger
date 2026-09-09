@@ -12,9 +12,6 @@ export type Media = 'text' | 'csv' | 'image'
 
 /* ------------------------------------------------------------------ money */
 
-/** USDC has 6 decimals. All amounts in this module are integer base units. */
-export const USDC_DECIMALS = 6
-
 /** 4246900n -> "4.246900 USDC". Always six decimals, always the suffix. */
 export function formatUsdc(baseUnits: bigint): string {
   const negative = baseUnits < 0n
@@ -56,7 +53,6 @@ export const PUBLISHER: Publisher = {
   domainRateInference: 500n,
 }
 
-export const TODAY = '3 September 2026'
 export const PERIOD_LABEL = '28 August – 3 September 2026'
 
 /* ------------------------------------------------------------------ works */
@@ -471,7 +467,6 @@ export const STREAM_INCOMING: readonly StreamRow[] = [
 ]
 
 export const STREAM_INTERVAL_MS = 4000
-export const ROW_ENTER_MS = 240
 export const EDGE_FLASH_MS = 600
 
 /* ---------------------------------------------------------------- receipt */

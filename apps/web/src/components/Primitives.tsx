@@ -17,10 +17,6 @@ export function Section({ children, ruled = false }: { children: ReactNode; rule
   )
 }
 
-export function Muted({ children }: { children: ReactNode }) {
-  return <span style={{ color: COLOR.muted }}>{children}</span>
-}
-
 export function FieldLabel({ children }: { children: ReactNode }) {
   return (
     <div className="serif" style={{ color: COLOR.muted, fontSize: 14, lineHeight: 1.4 }}>
