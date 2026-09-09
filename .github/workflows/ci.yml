@@ -6,12 +6,12 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      # Без `version:` навмисно — pnpm/action-setup@v4 падає з "Multiple versions
+      - uses: actions/checkout@v7
+      # Без `version:` навмисно — pnpm/action-setup падає з "Multiple versions
       # of pnpm specified", якщо у package.json є поле packageManager. Воно
       # точніше (9.15.0) і його ж читає corepack локально.
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # Та сама команда, що й локально: два описи гейта розходяться, один — ні.
@@ -23,9 +23,9 @@ jobs:
       run:
         working-directory: packages/program
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/bin
@@ -47,6 +47,10 @@ jobs:
         working-directory: .
         run: |
           if ! command -v anchor >/dev/null; then
+            # anchor-cli тягне підтримку гаманців Ledger → hidapi → системний
+            # libudev, якого на образі ubuntu-latest немає, і cargo install падає
+            # на build-скрипті hidapi. pkg-config ставити не треба — він уже є.
+            sudo apt-get update && sudo apt-get install -y libudev-dev
             cargo install anchor-cli --version 0.32.1 --locked
           fi
 
