@@ -14,7 +14,8 @@ export type MerklePath = readonly MerkleStep[]
 const LEAF_PREFIX = Uint8Array.of(0x00)
 const NODE_PREFIX = Uint8Array.of(0x01)
 
-const leafHash = (data: Uint8Array): Uint8Array => sha256(concatBytes(LEAF_PREFIX, data))
+/** Листок дерева і водночас ланка ланцюга ваучера — це має бути один хеш. */
+export const leafHash = (data: Uint8Array): Uint8Array => sha256(concatBytes(LEAF_PREFIX, data))
 
 const nodeHash = (left: Uint8Array, right: Uint8Array): Uint8Array =>
   sha256(concatBytes(NODE_PREFIX, left, right))

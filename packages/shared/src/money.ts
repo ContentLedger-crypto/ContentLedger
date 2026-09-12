@@ -9,11 +9,20 @@ export const MAX_USDC_BASE_UNITS = 2n ** 64n - 1n
 
 const CANONICAL_BASE_UNITS = /^(0|[1-9][0-9]*)$/
 
-export const usdcAmountSchema = z
+/**
+ * Повторний тест регексом усередині `refine` не зайвий: Zod 4 не спиняється на
+ * першій невдалій перевірці, тож без нього `BigInt()` покликався б на
+ * нецифровому вводі й перетворив би 400 на 500.
+ */
+export const usdcBaseUnitsSchema = z
   .string()
   .regex(CANONICAL_BASE_UNITS, 'expected USDC base units: digits only, no leading zeros')
-  .transform((digits) => BigInt(digits))
-  .refine((units) => units <= MAX_USDC_BASE_UNITS, 'amount exceeds u64')
+  .refine(
+    (digits) => CANONICAL_BASE_UNITS.test(digits) && BigInt(digits) <= MAX_USDC_BASE_UNITS,
+    'amount exceeds u64',
+  )
+
+export const usdcAmountSchema = usdcBaseUnitsSchema.transform((digits) => BigInt(digits))
 
 export type UsdcAmount = z.infer<typeof usdcAmountSchema>
 
