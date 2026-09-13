@@ -26,6 +26,11 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"
 
 [dependencies]
 anchor-lang = "0.32.1"
+# Пряма залежність, а не транзитивна: макрос `zero_copy` розкривається в
+# `#[derive(bytemuck::Pod)]` і шукає крейт у корені нашого. `min_const_generics`
+# потрібен через масив кільця на 120 елементів — похідна для `Pod` без нього
+# знає масиви лише до 32.
+bytemuck = { version = "1.25", features = ["derive", "min_const_generics"] }
 
 [dev-dependencies]
 mollusk-svm = "=0.15.0"

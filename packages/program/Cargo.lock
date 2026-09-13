@@ -864,6 +864,7 @@ name = "contentledger"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",
+ "bytemuck",
  "mollusk-svm",
  "solana-instruction 3.4.1",
  "solana-pubkey 4.2.1",
