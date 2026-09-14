@@ -14,7 +14,7 @@ cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
-idl-build = ["anchor-lang/idl-build"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 anchor-debug = []
 custom-heap = []
 custom-panic = []
@@ -31,8 +31,23 @@ anchor-lang = "0.32.1"
 # потрібен через масив кільця на 120 елементів — похідна для `Pod` без нього
 # знає масиви лише до 32.
 bytemuck = { version = "1.25", features = ["derive", "min_const_generics"] }
+# Тільки legacy SPL Token: розширення Token-2022 (transfer-fee, transfer-hook)
+# мовчки з'їдають частину переказу, а це ламає SC-005 («розбіжність нуль»).
+# Рішення тримають **типи акаунтів** (`anchor_spl::token::{Mint, TokenAccount}`
+# пінять власника до spl-token), а не набір фіч.
+# Фіча `token_2022` увімкнена лише тому, що в anchor-spl 0.32.1 `idl_build.rs`
+# не загороджений `#[cfg]` і безумовно згадує `crate::token_interface` — без неї
+# падає не наша збірка, а генерація IDL у чужому крейті.
+# `associated_token` під'їде на T025, коли з'являться виплати отримувачам.
+anchor-spl = { version = "0.32.1", default-features = false, features = [
+    "token",
+    "token_2022",
+] }
 
 [dev-dependencies]
 mollusk-svm = "=0.15.0"
+solana-account = "4.3"
 solana-instruction = "3.4"
 solana-pubkey = "4.2"
+# Щоб звіряти код помилки числом, а не рядком у Debug-виводі.
+solana-program-error = "3.0"
