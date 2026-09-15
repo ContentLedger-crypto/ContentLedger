@@ -56,6 +56,30 @@ pub mod contentledger {
     ) -> Result<()> {
         instructions::registry::register_work(ctx, source_hash, content_hash)
     }
+
+    pub fn set_domain_rates(
+        ctx: Context<UpdateDomain>,
+        rate_train: u64,
+        rate_inference: u64,
+    ) -> Result<()> {
+        instructions::registry::set_domain_rates(ctx, rate_train, rate_inference)
+    }
+
+    pub fn set_domain_status(ctx: Context<UpdateDomain>, status: LicenceStatus) -> Result<()> {
+        instructions::registry::set_domain_status(ctx, status)
+    }
+
+    pub fn set_work_rates(
+        ctx: Context<UpdateWork>,
+        rate_train: Option<u64>,
+        rate_inference: Option<u64>,
+    ) -> Result<()> {
+        instructions::registry::set_work_rates(ctx, rate_train, rate_inference)
+    }
+
+    pub fn set_work_status(ctx: Context<UpdateWork>, status: LicenceStatus) -> Result<()> {
+        instructions::registry::set_work_status(ctx, status)
+    }
 }
 
 #[derive(Accounts)]

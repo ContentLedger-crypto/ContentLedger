@@ -165,6 +165,74 @@ pub fn register_work(
     Ok(())
 }
 
+/// Спільний контекст для обох змін домену: власник і сам домен.
+///
+/// Тільки власник — FR-004 називає саме його. Оператор реєстр **засіває**
+/// (T022), а не редагує; менше прав в оператора — менше того, що доведеться
+/// відбирати на M3.
+#[derive(Accounts)]
+pub struct UpdateDomain<'info> {
+    pub owner: Signer<'info>,
+
+    #[account(mut, has_one = owner @ ContentLedgerError::Unauthorized)]
+    pub domain: Account<'info, Domain>,
+}
+
+pub fn set_domain_rates(
+    ctx: Context<UpdateDomain>,
+    rate_train: u64,
+    rate_inference: u64,
+) -> Result<()> {
+    let domain = &mut ctx.accounts.domain;
+    domain.rate_train = rate_train;
+    domain.rate_inference = rate_inference;
+    Ok(())
+}
+
+/// За FR-002b знятий домен закриває всі свої твори — але **жодного обходу
+/// творів тут немає й не потрібно**: закриття є правилом на читанні
+/// (`resolveRate` у `packages/shared`), а не станом, який треба рознести.
+/// Інакше зняття домену з тисячею творів було б тисячею транзакцій.
+///
+/// FR-004: зміна не діє заднім числом — уже видані квитанції несуть свій
+/// `tariff`, зафіксований підписом агента, і сетлмент читає його, а не реєстр.
+pub fn set_domain_status(ctx: Context<UpdateDomain>, status: LicenceStatus) -> Result<()> {
+    ctx.accounts.domain.status = status;
+    Ok(())
+}
+
+/// Контекст змін твору: домен потрібен, щоб узяти з нього власника.
+/// `owner` у `Work` навмисно не дублюється (рішення T013).
+#[derive(Accounts)]
+pub struct UpdateWork<'info> {
+    pub owner: Signer<'info>,
+
+    #[account(has_one = owner @ ContentLedgerError::Unauthorized)]
+    pub domain: Account<'info, Domain>,
+
+    #[account(mut, has_one = domain)]
+    pub work: Account<'info, Work>,
+}
+
+/// Обидві ставки передаються завжди: `None` **очищає** перекриття, повертаючи
+/// твір на ставку домену. Часткове оновлення зробило б «не міняй це поле» і
+/// «прибери перекриття» нерозрізненними.
+pub fn set_work_rates(
+    ctx: Context<UpdateWork>,
+    rate_train: Option<u64>,
+    rate_inference: Option<u64>,
+) -> Result<()> {
+    let work = &mut ctx.accounts.work;
+    work.rate_train = rate_train;
+    work.rate_inference = rate_inference;
+    Ok(())
+}
+
+pub fn set_work_status(ctx: Context<UpdateWork>, status: LicenceStatus) -> Result<()> {
+    ctx.accounts.work.status = status;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
