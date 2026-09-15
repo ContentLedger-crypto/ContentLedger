@@ -74,8 +74,7 @@ impl World {
         let id = program_id();
         let owner = Pubkey::new_unique();
         let (domain, _) = Pubkey::find_program_address(&[b"domain", &host_seed(HOST)], &id);
-        let (work, _) =
-            Pubkey::find_program_address(&[b"work", domain.as_ref(), &SOURCE_HASH], &id);
+        let (work, _) = Pubkey::find_program_address(&[b"work", &SOURCE_HASH], &id);
 
         Self {
             mollusk: Mollusk::new(&id, "contentledger"),
@@ -101,11 +100,7 @@ impl World {
     }
 
     fn work_account(&self, rate_train: Option<u64>, status: LicenceStatus) -> Account {
-        let bump = Pubkey::find_program_address(
-            &[b"work", self.domain.as_ref(), &SOURCE_HASH],
-            &program_id(),
-        )
-        .1;
+        let bump = Pubkey::find_program_address(&[b"work", &SOURCE_HASH], &program_id()).1;
         let state = Work {
             domain: anchor_key(&self.domain),
             source_hash: SOURCE_HASH,

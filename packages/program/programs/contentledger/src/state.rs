@@ -111,11 +111,13 @@ pub struct Domain {
     pub reserved: [u8; 32],
 }
 
-/// Твір. Сіди `["work", domain, sha256(source_id)]`.
+/// Твір. Сіди `["work", sha256(source_id)]` — **без домену**.
 ///
-/// Домен у сідах робить колізію джерела (FR-005) відмовою на рівні PDA:
-/// повторна реєстрація того самого джерела в тому самому домені б'ється об
-/// уже створений акаунт, а не створює другий запис.
+/// `source_id` це URL, у якого рівно один хост, тож джерело унікальне
+/// глобально: повторна реєстрація б'ється об уже створений акаунт, під чиїм би
+/// доменом її не робили (FR-005). Домен у сідах давав би відмову лише
+/// всередині домену — тобто той самий URL спокійно реєструвався б удруге під
+/// чужим доменом. Зв'язок із доменом лежить у тілі й перевіряється `has_one`.
 #[account]
 #[derive(InitSpace)]
 pub struct Work {
@@ -355,21 +357,19 @@ mod tests {
         assert!(LicenceStatus::try_from_slice(&[2]).is_err());
     }
 
-    /// Джерело з тим самим ідентифікатором у двох доменах — два різні акаунти;
-    /// у тому самому домені — один і той самий (FR-005).
+    /// Джерело унікальне глобально: PDA твору не залежить від домену, тож той
+    /// самий URL не реєструється вдруге під чужим доменом (FR-005).
     #[test]
-    fn work_pda_is_scoped_to_its_domain() {
+    fn work_pda_is_global_per_source() {
         let program_id = crate::ID;
-        let domain_a = Pubkey::new_unique();
-        let domain_b = Pubkey::new_unique();
-        let source = [9u8; 32];
+        let source_a = [9u8; 32];
+        let source_b = [10u8; 32];
 
-        let derive = |domain: &Pubkey| {
-            Pubkey::find_program_address(&[WORK_SEED, domain.as_ref(), &source], &program_id).0
-        };
+        let derive =
+            |source: &[u8; 32]| Pubkey::find_program_address(&[WORK_SEED, source], &program_id).0;
 
-        assert_ne!(derive(&domain_a), derive(&domain_b));
-        assert_eq!(derive(&domain_a), derive(&domain_a));
+        assert_eq!(derive(&source_a), derive(&source_a));
+        assert_ne!(derive(&source_a), derive(&source_b));
     }
 
     /// Сіди різних сімейств не перетинаються між собою.

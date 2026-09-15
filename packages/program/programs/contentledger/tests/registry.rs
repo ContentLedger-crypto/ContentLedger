@@ -166,10 +166,7 @@ impl World {
     }
 
     fn register_work(&self, payer: &Pubkey) -> (Pubkey, InstructionResult) {
-        let (work, _) = Pubkey::find_program_address(
-            &[b"work", self.domain.as_ref(), &SOURCE_HASH],
-            &program_id(),
-        );
+        let (work, _) = Pubkey::find_program_address(&[b"work", &SOURCE_HASH], &program_id());
         let (system_id, system_account) = mollusk_svm::program::keyed_account_for_system_program();
 
         let instruction = Instruction::new_with_bytes(

@@ -124,13 +124,17 @@ pub struct RegisterWork<'info> {
 
     pub domain: Account<'info, Domain>,
 
-    /// Домен у сідах робить колізію джерела (FR-005) відмовою на рівні PDA:
-    /// друга реєстрація того самого джерела бʼється об уже створений акаунт.
+    /// Сіди **без домену**: джерело реєструється рівно один раз глобально, і
+    /// FR-005 виконується на рівні PDA — друга реєстрація того самого URL
+    /// бʼється об уже створений акаунт, під чиїм би доменом її не робили.
+    /// Домен у сідах давав би відмову лише всередині домену, а `source_id` це
+    /// URL, у якого рівно один хост. Звʼязок із доменом лежить у тілі
+    /// (`work.domain`) і перевіряється через `has_one` при змінах.
     #[account(
         init,
         payer = payer,
         space = 8 + Work::INIT_SPACE,
-        seeds = [WORK_SEED, domain.key().as_ref(), source_hash.as_ref()],
+        seeds = [WORK_SEED, source_hash.as_ref()],
         bump,
     )]
     pub work: Account<'info, Work>,
