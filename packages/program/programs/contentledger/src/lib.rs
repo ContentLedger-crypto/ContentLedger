@@ -28,6 +28,34 @@ pub mod contentledger {
     ) -> Result<()> {
         instructions::config::init_config(ctx, protocol_fee_bps, node_share_bps, voucher_grace_s)
     }
+
+    pub fn register_domain(
+        ctx: Context<RegisterDomain>,
+        host_hash: [u8; 32],
+        host: String,
+        owner: Pubkey,
+        payout_owner: Pubkey,
+        rate_train: u64,
+        rate_inference: u64,
+    ) -> Result<()> {
+        instructions::registry::register_domain(
+            ctx,
+            host_hash,
+            host,
+            owner,
+            payout_owner,
+            rate_train,
+            rate_inference,
+        )
+    }
+
+    pub fn register_work(
+        ctx: Context<RegisterWork>,
+        source_hash: [u8; 32],
+        content_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::registry::register_work(ctx, source_hash, content_hash)
+    }
 }
 
 #[derive(Accounts)]

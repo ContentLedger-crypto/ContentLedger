@@ -14,4 +14,10 @@ pub enum ContentLedgerError {
     GraceOutOfRange,
     #[msg("Токен-акаунт скарбниці належить іншому мінту")]
     TreasuryMintMismatch,
+    #[msg("Хост не в канонічній формі")]
+    HostNotCanonical,
+    #[msg("Підписант не має права на цю дію")]
+    Unauthorized,
+    #[msg("Хеш хоста не збігається з самим хостом")]
+    HostHashMismatch,
 }

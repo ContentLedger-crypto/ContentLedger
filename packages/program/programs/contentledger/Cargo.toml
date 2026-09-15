@@ -43,6 +43,11 @@ anchor-spl = { version = "0.32.1", default-features = false, features = [
     "token",
     "token_2022",
 ] }
+# У шимі `anchor_lang::solana_program` крейти Solana розʼїхались, і модуля
+# `hash` там немає. Хешувати хост доводиться саме в програмі: сід обмежений
+# 32 байтами, а хост буває на 253. Версія 2.x — та, що вже в дереві через
+# `solana-pubkey` anchor'а; на 3.x у графі була б друга копія.
+solana-sha256-hasher = "2.3"
 
 [dev-dependencies]
 mollusk-svm = "=0.15.0"
