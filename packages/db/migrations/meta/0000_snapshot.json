@@ -1,0 +1,880 @@
+{
+  "id": "4c7578aa-518a-4fb2-b316-de353910c387",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.attestations": {
+      "name": "attestations",
+      "schema": "",
+      "columns": {
+        "work_id": {
+          "name": "work_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "node_key": {
+          "name": "node_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_claimed": {
+          "name": "owner_claimed",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ts": {
+          "name": "ts",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "attestations_work_id_works_id_fk": {
+          "name": "attestations_work_id_works_id_fk",
+          "tableFrom": "attestations",
+          "tableTo": "works",
+          "columnsFrom": ["work_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "attestations_work_id_node_key_pk": {
+          "name": "attestations_work_id_node_key_pk",
+          "columns": ["work_id", "node_key"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.auth_challenges": {
+      "name": "auth_challenges",
+      "schema": "",
+      "columns": {
+        "nonce": {
+          "name": "nonce",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "wallet": {
+          "name": "wallet",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used_at": {
+          "name": "used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.batches": {
+      "name": "batches",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "char(64)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "consumer": {
+          "name": "consumer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq_from": {
+          "name": "seq_from",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq_to": {
+          "name": "seq_to",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "root": {
+          "name": "root",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chain": {
+          "name": "chain",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tx_sig": {
+          "name": "tx_sig",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "batches_consumer_idx": {
+          "name": "batches_consumer_idx",
+          "columns": [
+            {
+              "expression": "consumer",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "seq_to",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "batches_range_ordered": {
+          "name": "batches_range_ordered",
+          "value": "\"batches\".\"seq_to\" >= \"batches\".\"seq_from\""
+        },
+        "batches_seq_from_positive": {
+          "name": "batches_seq_from_positive",
+          "value": "\"batches\".\"seq_from\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.domains": {
+      "name": "domains",
+      "schema": "",
+      "columns": {
+        "host": {
+          "name": "host",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payout_owner": {
+          "name": "payout_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rate_train": {
+          "name": "rate_train",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rate_inference": {
+          "name": "rate_inference",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "licence_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slot": {
+          "name": "slot",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "domains_owner_idx": {
+          "name": "domains_owner_idx",
+          "columns": [
+            {
+              "expression": "owner",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "domains_rate_train_non_negative": {
+          "name": "domains_rate_train_non_negative",
+          "value": "\"domains\".\"rate_train\" >= 0"
+        },
+        "domains_rate_inference_non_negative": {
+          "name": "domains_rate_inference_non_negative",
+          "value": "\"domains\".\"rate_inference\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.escrows": {
+      "name": "escrows",
+      "schema": "",
+      "columns": {
+        "consumer": {
+          "name": "consumer",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "deposited": {
+          "name": "deposited",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settled_total": {
+          "name": "settled_total",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seq": {
+          "name": "last_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_chain": {
+          "name": "last_chain",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slot": {
+          "name": "slot",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "escrows_deposited_non_negative": {
+          "name": "escrows_deposited_non_negative",
+          "value": "\"escrows\".\"deposited\" >= 0"
+        },
+        "escrows_settled_total_non_negative": {
+          "name": "escrows_settled_total_non_negative",
+          "value": "\"escrows\".\"settled_total\" >= 0"
+        },
+        "escrows_last_seq_non_negative": {
+          "name": "escrows_last_seq_non_negative",
+          "value": "\"escrows\".\"last_seq\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.receipts": {
+      "name": "receipts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "char(64)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "consumer": {
+          "name": "consumer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "work_id": {
+          "name": "work_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "use_type": {
+          "name": "use_type",
+          "type": "use_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tariff": {
+          "name": "tariff",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fee": {
+          "name": "fee",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "node_cut": {
+          "name": "node_cut",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rate_level": {
+          "name": "rate_level",
+          "type": "rate_level",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "served_hash": {
+          "name": "served_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registry_hash": {
+          "name": "registry_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hash_match": {
+          "name": "hash_match",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_method": {
+          "name": "payment_method",
+          "type": "payment_method",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_ref": {
+          "name": "payment_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accepted_at": {
+          "name": "accepted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "accepted_ts": {
+          "name": "accepted_ts",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "settled_at": {
+          "name": "settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "batch_id": {
+          "name": "batch_id",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "receipts_consumer_idx": {
+          "name": "receipts_consumer_idx",
+          "columns": [
+            {
+              "expression": "consumer",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "accepted_ts",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "receipts_work_idx": {
+          "name": "receipts_work_idx",
+          "columns": [
+            {
+              "expression": "work_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "accepted_ts",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "receipts_batch_idx": {
+          "name": "receipts_batch_idx",
+          "columns": [
+            {
+              "expression": "batch_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "receipts_work_id_works_id_fk": {
+          "name": "receipts_work_id_works_id_fk",
+          "tableFrom": "receipts",
+          "tableTo": "works",
+          "columnsFrom": ["work_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "receipts_batch_id_batches_id_fk": {
+          "name": "receipts_batch_id_batches_id_fk",
+          "tableFrom": "receipts",
+          "tableTo": "batches",
+          "columnsFrom": ["batch_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "receipts_tariff_non_negative": {
+          "name": "receipts_tariff_non_negative",
+          "value": "\"receipts\".\"tariff\" >= 0"
+        },
+        "receipts_fee_non_negative": {
+          "name": "receipts_fee_non_negative",
+          "value": "\"receipts\".\"fee\" >= 0"
+        },
+        "receipts_node_cut_non_negative": {
+          "name": "receipts_node_cut_non_negative",
+          "value": "\"receipts\".\"node_cut\" >= 0"
+        },
+        "receipts_payment_ref_matches_method": {
+          "name": "receipts_payment_ref_matches_method",
+          "value": "(\"receipts\".\"payment_method\" = 'x402') = (\"receipts\".\"payment_ref\" is not null)"
+        },
+        "receipts_x402_never_batched": {
+          "name": "receipts_x402_never_batched",
+          "value": "\"receipts\".\"payment_method\" = 'escrow' or \"receipts\".\"batch_id\" is null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.sessions": {
+      "name": "sessions",
+      "schema": "",
+      "columns": {
+        "token_hash": {
+          "name": "token_hash",
+          "type": "char(64)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "wallet": {
+          "name": "wallet",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "sessions_wallet_idx": {
+          "name": "sessions_wallet_idx",
+          "columns": [
+            {
+              "expression": "wallet",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.vouchers": {
+      "name": "vouchers",
+      "schema": "",
+      "columns": {
+        "consumer": {
+          "name": "consumer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cumulative": {
+          "name": "cumulative",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chain": {
+          "name": "chain",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signature": {
+          "name": "signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "batch_id": {
+          "name": "batch_id",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "vouchers_receipt_idx": {
+          "name": "vouchers_receipt_idx",
+          "columns": [
+            {
+              "expression": "receipt_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vouchers_batch_idx": {
+          "name": "vouchers_batch_idx",
+          "columns": [
+            {
+              "expression": "batch_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "vouchers_receipt_id_receipts_id_fk": {
+          "name": "vouchers_receipt_id_receipts_id_fk",
+          "tableFrom": "vouchers",
+          "tableTo": "receipts",
+          "columnsFrom": ["receipt_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "vouchers_batch_id_batches_id_fk": {
+          "name": "vouchers_batch_id_batches_id_fk",
+          "tableFrom": "vouchers",
+          "tableTo": "batches",
+          "columnsFrom": ["batch_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "vouchers_consumer_seq_pk": {
+          "name": "vouchers_consumer_seq_pk",
+          "columns": ["consumer", "seq"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "vouchers_seq_positive": {
+          "name": "vouchers_seq_positive",
+          "value": "\"vouchers\".\"seq\" >= 1"
+        },
+        "vouchers_cumulative_non_negative": {
+          "name": "vouchers_cumulative_non_negative",
+          "value": "\"vouchers\".\"cumulative\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.works": {
+      "name": "works",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "host": {
+          "name": "host",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rate_train": {
+          "name": "rate_train",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rate_inference": {
+          "name": "rate_inference",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "licence_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "byte_len": {
+          "name": "byte_len",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slot": {
+          "name": "slot",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "works_source_id_idx": {
+          "name": "works_source_id_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "works_host_idx": {
+          "name": "works_host_idx",
+          "columns": [
+            {
+              "expression": "host",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "works_host_domains_host_fk": {
+          "name": "works_host_domains_host_fk",
+          "tableFrom": "works",
+          "tableTo": "domains",
+          "columnsFrom": ["host"],
+          "columnsTo": ["host"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "works_rate_train_non_negative": {
+          "name": "works_rate_train_non_negative",
+          "value": "\"works\".\"rate_train\" >= 0"
+        },
+        "works_rate_inference_non_negative": {
+          "name": "works_rate_inference_non_negative",
+          "value": "\"works\".\"rate_inference\" >= 0"
+        },
+        "works_byte_len_non_negative": {
+          "name": "works_byte_len_non_negative",
+          "value": "\"works\".\"byte_len\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.licence_status": {
+      "name": "licence_status",
+      "schema": "public",
+      "values": ["active", "suspended"]
+    },
+    "public.payment_method": {
+      "name": "payment_method",
+      "schema": "public",
+      "values": ["escrow", "x402"]
+    },
+    "public.rate_level": {
+      "name": "rate_level",
+      "schema": "public",
+      "values": ["domain", "work"]
+    },
+    "public.use_type": {
+      "name": "use_type",
+      "schema": "public",
+      "values": ["train", "inference"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
