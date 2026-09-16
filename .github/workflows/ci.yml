@@ -57,6 +57,15 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: anchor build
+
+      # IDL у packages/chain — копія, бо target/ під .gitignore, а TS-джоба не
+      # має ані Rust-тулчейну, ані 18 хвилин на збірку програми. Звіряти його
+      # можна лише тут, де щойно пройшов anchor build: застаріла копія стає
+      # червоним CI, а не транзакцією з не тими байтами на devnet.
+      - name: IDL збігається з програмою
+        working-directory: .
+        run: node packages/chain/scripts/sync-idl.mjs --check
+
       # Тільки після anchor build: mollusk вантажить contentledger.so з SBF_OUT_DIR,
       # а до збірки його не існує.
       - run: SBF_OUT_DIR=$PWD/target/deploy cargo test --manifest-path programs/contentledger/Cargo.toml

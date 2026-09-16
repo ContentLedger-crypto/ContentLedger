@@ -1,0 +1,619 @@
+{
+  "address": "HFoHycv5MSCFizdb4GhPSYgLWFfwu1MgEW8qx8zuWKh2",
+  "metadata": {
+    "name": "contentledger",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "On-chain licence registry, escrow and royalty settlement"
+  },
+  "instructions": [
+    {
+      "name": "init_config",
+      "discriminator": [23, 235, 115, 232, 168, 96, 1, 231],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Хто викликав перший, той і `authority`. PDA не дає створити `Config`",
+            "удруге, а деплой і `init` ідуть одним скриптом, тож вікно між ними",
+            "вимірюється секундами. Для mainnet звірка з `upgrade_authority` —",
+            "окремий крок hardening, свідомо не зроблений на M1."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "Валюта протоколу (FR-010). Тип пінить власника до legacy SPL Token:",
+            "розширення Token-2022 (transfer-fee, transfer-hook) мовчки з'їдають",
+            "частину переказу, а це ламає SC-005."
+          ]
+        },
+        {
+          "name": "treasury_ata",
+          "docs": [
+            "Куди йде комісія протоколу. Перевіряється тут, а не на першому",
+            "сетлменті: помилку в адресі краще ловити на init, ніж під час",
+            "наскрізного прогону M1."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "protocol_fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "node_share_bps",
+          "type": "u16"
+        },
+        {
+          "name": "voucher_grace_s",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "ping",
+      "discriminator": [173, 0, 94, 236, 73, 133, 225, 153],
+      "accounts": [],
+      "args": []
+    },
+    {
+      "name": "register_domain",
+      "discriminator": [236, 7, 208, 151, 173, 149, 73, 104],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Платник ренти. До M4 це або оператор (посів реєстру, T022), або сам",
+            "власник домену — атестації, яку вимагає FR-005a, ще не існує."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "domain",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [100, 111, 109, 97, 105, 110]
+              },
+              {
+                "kind": "arg",
+                "path": "host_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "host_hash",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "host",
+          "type": "string"
+        },
+        {
+          "name": "owner",
+          "type": "pubkey"
+        },
+        {
+          "name": "payout_owner",
+          "type": "pubkey"
+        },
+        {
+          "name": "rate_train",
+          "type": "u64"
+        },
+        {
+          "name": "rate_inference",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "register_work",
+      "discriminator": [105, 11, 219, 35, 224, 25, 75, 28],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "domain"
+        },
+        {
+          "name": "work",
+          "docs": [
+            "Сіди **без домену**: джерело реєструється рівно один раз глобально, і",
+            "FR-005 виконується на рівні PDA — друга реєстрація того самого URL",
+            "бʼється об уже створений акаунт, під чиїм би доменом її не робили.",
+            "Домен у сідах давав би відмову лише всередині домену, а `source_id` це",
+            "URL, у якого рівно один хост. Звʼязок із доменом лежить у тілі",
+            "(`work.domain`) і перевіряється через `has_one` при змінах."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [119, 111, 114, 107]
+              },
+              {
+                "kind": "arg",
+                "path": "source_hash"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "source_hash",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "content_hash",
+          "type": {
+            "array": ["u8", 32]
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_domain_rates",
+      "discriminator": [248, 204, 145, 199, 108, 189, 116, 249],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["domain"]
+        },
+        {
+          "name": "domain",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "rate_train",
+          "type": "u64"
+        },
+        {
+          "name": "rate_inference",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_domain_status",
+      "discriminator": [43, 187, 93, 249, 194, 189, 195, 232],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["domain"]
+        },
+        {
+          "name": "domain",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "status",
+          "type": {
+            "defined": {
+              "name": "LicenceStatus"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_work_rates",
+      "discriminator": [108, 48, 144, 190, 159, 245, 147, 249],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["domain"]
+        },
+        {
+          "name": "domain",
+          "relations": ["work"]
+        },
+        {
+          "name": "work",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "rate_train",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "rate_inference",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_work_status",
+      "discriminator": [237, 17, 19, 127, 116, 251, 241, 235],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": ["domain"]
+        },
+        {
+          "name": "domain",
+          "relations": ["work"]
+        },
+        {
+          "name": "work",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "status",
+          "type": {
+            "defined": {
+              "name": "LicenceStatus"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [155, 12, 170, 224, 30, 250, 204, 130]
+    },
+    {
+      "name": "Domain",
+      "discriminator": [167, 191, 231, 63, 146, 41, 115, 27]
+    },
+    {
+      "name": "Work",
+      "discriminator": [140, 4, 80, 230, 31, 233, 85, 175]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "BpsOutOfRange",
+      "msg": "Частка в базисних пунктах перевищує 100%"
+    },
+    {
+      "code": 6001,
+      "name": "GraceOutOfRange",
+      "msg": "Вікно на вивід поза дозволеними межами"
+    },
+    {
+      "code": 6002,
+      "name": "TreasuryMintMismatch",
+      "msg": "Токен-акаунт скарбниці належить іншому мінту"
+    },
+    {
+      "code": 6003,
+      "name": "HostNotCanonical",
+      "msg": "Хост не в канонічній формі"
+    },
+    {
+      "code": 6004,
+      "name": "Unauthorized",
+      "msg": "Підписант не має права на цю дію"
+    },
+    {
+      "code": 6005,
+      "name": "HostHashMismatch",
+      "msg": "Хеш хоста не збігається з самим хостом"
+    }
+  ],
+  "types": [
+    {
+      "name": "Config",
+      "docs": ["Глобальні параметри протоколу. Синглтон, сіди `[\"config\"]`."],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": ["Хто змінює цей акаунт."],
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_ata",
+            "docs": ["Куди йде комісія протоколу. Токен-акаунт, не власник."],
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "Єдина валюта тарифів, escrow і виплат (FR-010). Без цього піна програма",
+              "прийняла б будь-який SPL-токен як USDC."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "protocol_fee_bps",
+            "docs": ["Комісія протоколу — надбавка **понад** тариф (FR-017), округлення вгору."],
+            "type": "u16"
+          },
+          {
+            "name": "node_share_bps",
+            "docs": [
+              "Частка вузла-атестатора — **всередині** тарифу (FR-017b), округлення",
+              "вниз. Нульова до M4."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "voucher_grace_s",
+            "docs": [
+              "Скільки секунд між заявкою на вивід і самим виводом: вікно, за яке",
+              "шлюз мусить відсетлити вже видані ваучери. Глобальне значення безпечне",
+              "саме тому, що `request_withdraw` знімає з нього знімок у",
+              "`Escrow::withdraw_after`."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "paused",
+            "docs": ["Аварійна зупинка. Один байт проти апгрейду програми."],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": ["Запас під майбутні поля; змінюється тільки разом із міграцією."],
+            "type": {
+              "array": ["u8", 64]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Domain",
+      "docs": [
+        "Домен видавця. Сіди `[\"domain\", sha256(host)]`.",
+        "",
+        "Канонічна форма `host`, з якої береться хеш: lowercase, IDNA A-label,",
+        "без схеми, без порту, без кінцевої крапки. Хеш є сідом, тож будь-який дрейф",
+        "канонізації створює другий домен для того самого сайту. Перевірка форми",
+        "живе в `register_domain` (T015)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "docs": ["Гаманець видавця. Джерело правди про власника і для творів домену."],
+            "type": "pubkey"
+          },
+          {
+            "name": "payout_owner",
+            "docs": [
+              "Гаманець, на ATA якого йдуть виплати, — **не сам ATA**. За FR-010a",
+              "токен-акаунта отримувача може ще не існувати: `settle_batch` створює",
+              "його ідемпотентно коштом операторського ключа, а для цього потрібен",
+              "власник, а не адреса, якої нема. Окремий від `owner` навмисно:",
+              "контроль над доменом і адреса грошей бувають різними гаманцями."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "host",
+            "docs": [
+              "Прообраз ідентифікатора домену. Хеш не зберігається — він виводиться",
+              "звідси, і два представлення одного ідентифікатора були б двома",
+              "джерелами правди."
+            ],
+            "type": "string"
+          },
+          {
+            "name": "rate_train",
+            "docs": ["Базова ставка за тренування, базові одиниці USDC (FR-002)."],
+            "type": "u64"
+          },
+          {
+            "name": "rate_inference",
+            "docs": ["Базова ставка за inference-запит."],
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "LicenceStatus"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": ["Запас під майбутні поля; змінюється тільки разом із міграцією."],
+            "type": {
+              "array": ["u8", 32]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "LicenceStatus",
+      "docs": [
+        "Статус ліцензування. Верифікація — **окрема вісь** (`Work::attested_by`):",
+        "за FR-011c розбіжність хешів робить твір неперевіреним, і твір, знятий",
+        "власником **і** неперевірений, мусить мати представлення."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Suspended"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Work",
+      "docs": [
+        "Твір. Сіди `[\"work\", sha256(source_id)]` — **без домену**.",
+        "",
+        "`source_id` це URL, у якого рівно один хост, тож джерело унікальне",
+        "глобально: повторна реєстрація б'ється об уже створений акаунт, під чиїм би",
+        "доменом її не робили (FR-005). Домен у сідах давав би відмову лише",
+        "всередині домену — тобто той самий URL спокійно реєструвався б удруге під",
+        "чужим доменом. Зв'язок із доменом лежить у тілі й перевіряється `has_one`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "domain",
+            "docs": [
+              "Домен-власник. `owner` тут не дублюється: він живе в `Domain`, і",
+              "дублікат довелося б синхронізувати при передачі домену."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "source_hash",
+            "docs": [
+              "sha256 канонічного ідентифікатора джерела. Прообраз ончейн не лежить —",
+              "URL буває на тисячі символів, а творів багато."
+            ],
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "content_hash",
+            "docs": ["sha256 вмісту твору на момент реєстрації (FR-011a)."],
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "rate_train",
+            "docs": [
+              "Перекриття базової ставки домену (FR-002a). `None` — «не задано»;",
+              "сентинел `0` тут неможливий, бо нульова ставка легітимна."
+            ],
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "rate_inference",
+            "docs": ["Перекриття базової ставки домену за inference-запит."],
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "LicenceStatus"
+              }
+            }
+          },
+          {
+            "name": "attested_by",
+            "docs": ["Скільки вузлів атестували твір, із насиченням на 255. Інертне до M4."],
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": ["Запас під майбутні поля; змінюється тільки разом із міграцією."],
+            "type": {
+              "array": ["u8", 32]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
