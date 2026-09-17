@@ -1,0 +1,9 @@
+{
+  "host": "devblog.test",
+  "updated": "2026-01-30T18:00:00Z",
+  "items": [
+    { "path": "/posts/rust-zero-copy.md", "title": "zero_copy там, де акаунт не влазить у стек" },
+    { "path": "/posts/anchor-idl-traps.md", "title": "Три пастки IDL" },
+    { "path": "/posts/hono-sse.html", "title": "SSE у Hono" }
+  ]
+}

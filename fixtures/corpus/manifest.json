@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "domains": [
+    {
+      "host": "acme-news.test",
+      "owner": "7ddMq1eic5MmuNAvoUzBnFo7epc383GAMyoY1atS7PQZ",
+      "payoutOwner": "7ddMq1eic5MmuNAvoUzBnFo7epc383GAMyoY1atS7PQZ",
+      "rateTrain": "2000",
+      "rateInference": "500",
+      "status": "active",
+      "works": [
+        {
+          "path": "/2026/ai-act-explained.html",
+          "mediaType": "text/html; charset=utf-8",
+          "status": "active"
+        },
+        {
+          "path": "/2026/solana-fee-market.html",
+          "mediaType": "text/html; charset=utf-8",
+          "status": "active",
+          "rateTrain": "9000"
+        },
+        {
+          "path": "/data/2026-crawler-traffic.json",
+          "mediaType": "application/json",
+          "status": "active"
+        },
+        {
+          "path": "/archive/2019-open-web.md",
+          "mediaType": "text/markdown; charset=utf-8",
+          "status": "suspended"
+        }
+      ]
+    },
+    {
+      "host": "kyiv-photo.test",
+      "owner": "8UsA1r8FreWa4Xp5wZxE6mbWDMotWYoNPVjMpoJDTHX8",
+      "payoutOwner": "FKoKPEnGHQsawTzHpWCvWj1WxAtwFCbZqZEWV4D3JoLM",
+      "rateTrain": "5000",
+      "rateInference": "1500",
+      "status": "active",
+      "works": [
+        {
+          "path": "/gallery/podil-morning.png",
+          "mediaType": "image/png",
+          "status": "active",
+          "rateTrain": "25000",
+          "rateInference": "8000"
+        },
+        {
+          "path": "/gallery/dnipro-bridge.png",
+          "mediaType": "image/png",
+          "status": "active"
+        },
+        {
+          "path": "/about/licence.md",
+          "mediaType": "text/markdown; charset=utf-8",
+          "status": "active",
+          "rateTrain": "0",
+          "rateInference": "0"
+        },
+        {
+          "path": "/feeds/latest.json",
+          "mediaType": "application/json",
+          "status": "active"
+        }
+      ]
+    },
+    {
+      "host": "devblog.test",
+      "owner": "HCZBLhMLd26pwQex6vupbHGJo65EM4svZXDpziRcz93p",
+      "payoutOwner": "HCZBLhMLd26pwQex6vupbHGJo65EM4svZXDpziRcz93p",
+      "rateTrain": "1000",
+      "rateInference": "300",
+      "status": "suspended",
+      "works": [
+        {
+          "path": "/posts/rust-zero-copy.md",
+          "mediaType": "text/markdown; charset=utf-8",
+          "status": "active"
+        },
+        {
+          "path": "/posts/anchor-idl-traps.md",
+          "mediaType": "text/markdown; charset=utf-8",
+          "status": "active"
+        },
+        {
+          "path": "/posts/hono-sse.html",
+          "mediaType": "text/html; charset=utf-8",
+          "status": "active"
+        },
+        {
+          "path": "/feeds/atom.json",
+          "mediaType": "application/json",
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}

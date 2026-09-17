@@ -1,0 +1,10 @@
+{
+  "period": "2026-Q1",
+  "host": "acme-news.test",
+  "requests": {
+    "human": 412903,
+    "crawler_declared": 88140,
+    "crawler_undeclared": 236517
+  },
+  "note": "Незадекларований обхід оцінено за відбитком клієнта, а не за User-Agent."
+}

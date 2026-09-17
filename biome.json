@@ -4,6 +4,7 @@
     "includes": [
       "**",
       "!**/node_modules",
+      "!**/.secrets",
       "!**/dist",
       "!**/.vercel",
       "!**/pnpm-lock.yaml",

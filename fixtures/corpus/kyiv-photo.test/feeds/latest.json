@@ -1,0 +1,8 @@
+{
+  "host": "kyiv-photo.test",
+  "updated": "2026-02-14T09:20:00Z",
+  "items": [
+    { "path": "/gallery/podil-morning.png", "title": "Ранок на Подолі" },
+    { "path": "/gallery/dnipro-bridge.png", "title": "Міст через Дніпро" }
+  ]
+}

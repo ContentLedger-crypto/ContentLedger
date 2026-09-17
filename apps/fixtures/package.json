@@ -1,27 +1,30 @@
 {
-  "name": "@contentledger/chain",
+  "name": "@contentledger/fixtures",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./identifiers": "./src/identifiers.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "idl:sync": "node --experimental-strip-types scripts/sync-idl.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@contentledger/shared": "workspace:*",
-    "@coral-xyz/anchor": "catalog:",
+    "@hono/node-server": "2.1.1",
     "@noble/hashes": "1.8.0",
-    "@solana/web3.js": "catalog:"
+    "hono": "4.13.5",
+    "zod": "4.5.4"
   },
   "devDependencies": {
-    "@types/node": "22.13.1",
+    "@contentledger/chain": "workspace:*",
+    "@solana/web3.js": "catalog:",
+    "tsx": "4.23.13",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   }
