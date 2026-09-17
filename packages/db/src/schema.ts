@@ -7,12 +7,14 @@ import {
   index,
   integer,
   pgEnum,
+  pgPolicy,
   pgTable,
   primaryKey,
   text,
   timestamp,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
+import { anonRole, authenticatedRole } from 'drizzle-orm/supabase'
 
 /**
  * Дзеркало ончейн-стану плюс те, чого в ланцюгу немає: квитанції, склад
@@ -50,6 +52,21 @@ const base58 = (name: string) => text(name)
 /** Базові одиниці USDC. Без дефолту — див. пастку `drizzle-kit` вище. */
 const usdc = (name: string) => bigint(name, { mode: 'bigint' })
 
+/**
+ * Обидві публічні ролі Supabase не бачать нічого. `RESTRICTIVE`, а не просто
+ * увімкнений RLS без політик: restrictive-політики поєднуються через AND, тож
+ * permissive-політика, дописана колись через дашборд, таблицю вже не відкриє.
+ * Сервіси ходять службовою роллю і власником схеми, а їх RLS не стосується.
+ */
+const denyAll = (table: string) =>
+  pgPolicy(`${table}_deny_all`, {
+    as: 'restrictive',
+    for: 'all',
+    to: [anonRole, authenticatedRole],
+    using: sql`false`,
+    withCheck: sql`false`,
+  })
+
 export const domains = pgTable(
   'domains',
   {
@@ -66,8 +83,9 @@ export const domains = pgTable(
     index('domains_owner_idx').on(table.owner),
     check('domains_rate_train_non_negative', sql`${table.rateTrain} >= 0`),
     check('domains_rate_inference_non_negative', sql`${table.rateInference} >= 0`),
+    denyAll('domains'),
   ],
-)
+).enableRLS()
 
 export const works = pgTable(
   'works',
@@ -94,8 +112,9 @@ export const works = pgTable(
     check('works_rate_train_non_negative', sql`${table.rateTrain} >= 0`),
     check('works_rate_inference_non_negative', sql`${table.rateInference} >= 0`),
     check('works_byte_len_non_negative', sql`${table.byteLen} >= 0`),
+    denyAll('works'),
   ],
-)
+).enableRLS()
 
 export const escrows = pgTable(
   'escrows',
@@ -111,8 +130,9 @@ export const escrows = pgTable(
     check('escrows_deposited_non_negative', sql`${table.deposited} >= 0`),
     check('escrows_settled_total_non_negative', sql`${table.settledTotal} >= 0`),
     check('escrows_last_seq_non_negative', sql`${table.lastSeq} >= 0`),
+    denyAll('escrows'),
   ],
-)
+).enableRLS()
 
 export const batches = pgTable(
   'batches',
@@ -131,8 +151,9 @@ export const batches = pgTable(
     index('batches_consumer_idx').on(table.consumer, table.seqTo),
     check('batches_range_ordered', sql`${table.seqTo} >= ${table.seqFrom}`),
     check('batches_seq_from_positive', sql`${table.seqFrom} >= 1`),
+    denyAll('batches'),
   ],
-)
+).enableRLS()
 
 export const receipts = pgTable(
   'receipts',
@@ -181,8 +202,9 @@ export const receipts = pgTable(
       'receipts_x402_never_batched',
       sql`${table.paymentMethod} = 'escrow' or ${table.batchId} is null`,
     ),
+    denyAll('receipts'),
   ],
-)
+).enableRLS()
 
 export const vouchers = pgTable(
   'vouchers',
@@ -203,8 +225,9 @@ export const vouchers = pgTable(
     index('vouchers_batch_idx').on(table.batchId),
     check('vouchers_seq_positive', sql`${table.seq} >= 1`),
     check('vouchers_cumulative_non_negative', sql`${table.cumulative} >= 0`),
+    denyAll('vouchers'),
   ],
-)
+).enableRLS()
 
 export const attestations = pgTable(
   'attestations',
@@ -217,16 +240,20 @@ export const attestations = pgTable(
     ownerClaimed: base58('owner_claimed').notNull(),
     ts: timestamp('ts', { withTimezone: true }).notNull(),
   },
-  (table) => [primaryKey({ columns: [table.workId, table.nodeKey] })],
-)
+  (table) => [primaryKey({ columns: [table.workId, table.nodeKey] }), denyAll('attestations')],
+).enableRLS()
 
-export const authChallenges = pgTable('auth_challenges', {
-  nonce: text('nonce').primaryKey(),
-  wallet: base58('wallet').notNull(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  /** Не `null` рівно з моменту використання: другий раз виклик не приймається. */
-  usedAt: timestamp('used_at', { withTimezone: true }),
-})
+export const authChallenges = pgTable(
+  'auth_challenges',
+  {
+    nonce: text('nonce').primaryKey(),
+    wallet: base58('wallet').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    /** Не `null` рівно з моменту використання: другий раз виклик не приймається. */
+    usedAt: timestamp('used_at', { withTimezone: true }),
+  },
+  () => [denyAll('auth_challenges')],
+).enableRLS()
 
 export const sessions = pgTable(
   'sessions',
@@ -236,5 +263,5 @@ export const sessions = pgTable(
     wallet: base58('wallet').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   },
-  (table) => [index('sessions_wallet_idx').on(table.wallet)],
-)
+  (table) => [index('sessions_wallet_idx').on(table.wallet), denyAll('sessions')],
+).enableRLS()
