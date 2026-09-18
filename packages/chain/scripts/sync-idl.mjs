@@ -25,7 +25,10 @@ try {
 }
 
 if (process.argv.includes('--check')) {
-  const current = readFileSync(committed, 'utf8')
+  // Обидва боки через ту саму нормалізацію: порівнюється зміст, а не байти.
+  // Інакше будь-який форматер, що торкнувся копії, давав би червоний CI при
+  // ідентичному IDL — саме так і сталося на першому прогоні.
+  const current = normalise(readFileSync(committed, 'utf8'))
   if (current !== fresh) {
     console.error(
       'IDL у packages/chain розійшовся з програмою. Запусти `pnpm --filter @contentledger/chain idl:sync`.',
