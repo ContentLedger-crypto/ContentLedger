@@ -1,0 +1,26 @@
+{
+  "name": "@contentledger/seed-registry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "seed": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@contentledger/chain": "workspace:*",
+    "@contentledger/fixtures": "workspace:*",
+    "@solana/web3.js": "catalog:"
+  },
+  "devDependencies": {
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}
