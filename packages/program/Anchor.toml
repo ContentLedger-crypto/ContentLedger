@@ -5,6 +5,14 @@ anchor_version = "0.32.1"
 resolution = true
 skip-lint = false
 
+# Обидві секції з однією адресою, і localnet тут не для локальної мережі.
+# Config::discover у anchor-cli на кожному виклику перевіряє: якщо немає
+# target/deploy і немає [programs.localnet] — він генерує новий keypair і
+# переписує declare_id! у lib.rs. Свіжий клон у CI задовольняє обидві умови,
+# і програма збирається з випадковим ID.
+[programs.localnet]
+contentledger = "HFoHycv5MSCFizdb4GhPSYgLWFfwu1MgEW8qx8zuWKh2"
+
 [programs.devnet]
 contentledger = "HFoHycv5MSCFizdb4GhPSYgLWFfwu1MgEW8qx8zuWKh2"
 
