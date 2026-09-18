@@ -33,6 +33,18 @@ if (process.argv.includes('--check')) {
     console.error(
       'IDL у packages/chain розійшовся з програмою. Запусти `pnpm --filter @contentledger/chain idl:sync`.',
     )
+    // Перші розбіжні рядки — інакше з CI видно лише факт, а не причину.
+    const was = current.split('\n')
+    const now = fresh.split('\n')
+    let shown = 0
+    for (let i = 0; i < Math.max(was.length, now.length) && shown < 20; i++) {
+      if (was[i] !== now[i]) {
+        console.error(`  рядок ${i + 1}`)
+        console.error(`    копія:    ${was[i] ?? '<кінець>'}`)
+        console.error(`    програма: ${now[i] ?? '<кінець>'}`)
+        shown++
+      }
+    }
     process.exit(1)
   }
   console.log('IDL збігається з програмою.')
