@@ -13,22 +13,36 @@ import { fileURLToPath } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 const generated = join(here, '../../program/target/idl/contentledger.json')
 const committed = join(here, '../src/idl/contentledger.json')
+const librs = join(here, '../../program/programs/contentledger/src/lib.rs')
 
-const normalise = (raw) => `${JSON.stringify(JSON.parse(raw), null, 2)}\n`
+// `address` береться з `declare_id!`, а не з того, що записав `anchor build`:
+// CLI бере його з `target/deploy/*-keypair.json`, якого в CI немає (ключ
+// програми не в репозиторії), і на раннері підставляє свіжозгенерований —
+// перший прогін розійшовся рівно в цьому одному полі. Рантайм програми
+// перевіряє саме `declare_id!`, тож це і є джерело правди.
+const declared = /declare_id!\("([1-9A-HJ-NP-Za-km-z]{32,44})"\)/.exec(readFileSync(librs, 'utf8'))
+if (declared === null) {
+  console.error(`У ${librs} немає declare_id!`)
+  process.exit(2)
+}
+
+const format = (idl) => `${JSON.stringify(idl, null, 2)}\n`
 
 let fresh
 try {
-  fresh = normalise(readFileSync(generated, 'utf8'))
+  const idl = JSON.parse(readFileSync(generated, 'utf8'))
+  idl.address = declared[1]
+  fresh = format(idl)
 } catch {
   console.error(`Немає ${generated}. Спершу \`anchor build\` у packages/program.`)
   process.exit(2)
 }
 
 if (process.argv.includes('--check')) {
-  // Обидва боки через ту саму нормалізацію: порівнюється зміст, а не байти.
-  // Інакше будь-який форматер, що торкнувся копії, давав би червоний CI при
-  // ідентичному IDL — саме так і сталося на першому прогоні.
-  const current = normalise(readFileSync(committed, 'utf8'))
+  // Копія переформатовується, але не виправляється: порівнюється зміст, а не
+  // байти (форматер, що торкнувся копії, давав би червоний CI при ідентичному
+  // IDL), проте хибний `address` у копії лишається видимою розбіжністю.
+  const current = format(JSON.parse(readFileSync(committed, 'utf8')))
   if (current !== fresh) {
     console.error(
       'IDL у packages/chain розійшовся з програмою. Запусти `pnpm --filter @contentledger/chain idl:sync`.',
