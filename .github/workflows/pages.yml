@@ -1,0 +1,64 @@
+# Дашборд видавця на GitHub Pages: https://contentledger-crypto.github.io/ContentLedger/
+#
+# Публікується те, що є в apps/web на момент push у main. До M2 це прототип на
+# моках (M0) — жодних VITE_* тут не задано, і сторінка сама про це каже. Коли
+# зʼявиться шлюз, VITE_API_URL прийде з repository Variables, не з коду.
+#
+# Rust тут не потрібен: IDL лежить копією в packages/chain і збирається з web.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Другий push не обганяє першого: деплої йдуть по черзі, а не паралельно.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Без `version:` навмисно — те саме, що в ci.yml: версію читає
+      # packageManager із package.json.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      # Червоний гейт не публікується: Pages показує лише те, що пройшло
+      # ту саму команду, що й локально.
+      - run: pnpm gate
+
+      - run: pnpm --filter @contentledger/web build
+        env:
+          # Проектний сайт живе під /<repo>/, не в корені домену.
+          PAGES_BASE: /${{ github.event.repository.name }}/
+
+      # Pages вмикає власник репозиторію один раз: Settings → Pages → Source:
+      # "GitHub Actions". GITHUB_TOKEN сам сайт створити не може (перший прогін
+      # у RunwayLadder упав із "Resource not accessible by integration"), тож
+      # крок лише читає наявну конфігурацію.
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
