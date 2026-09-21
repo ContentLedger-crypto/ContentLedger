@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { loadCorpus } from '@contentledger/fixtures'
 import { Connection, Keypair, PublicKey } from '@solana/web3.js'
@@ -17,14 +17,17 @@ const { values } = parseArgs({
   },
 })
 
+/** `.env` пише шляхи від кореня репо, а pnpm запускає скрипт із теки пакета. */
+const fromRoot = (path: string): string => resolve(import.meta.dirname, '../../..', path)
+
 const keypair = (path: string): Keypair =>
-  Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, 'utf8'))))
+  Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(fromRoot(path), 'utf8'))))
 
 /** Ключі індексуються за pubkey, а не за іменем файла: імен корпус не задає. */
 function loadOwners(directory: string): Map<string, Keypair> {
   const owners = new Map<string, Keypair>()
 
-  for (const file of readdirSync(directory)) {
+  for (const file of readdirSync(fromRoot(directory))) {
     if (file.endsWith('.keypair.json')) {
       const loaded = keypair(join(directory, file))
       owners.set(loaded.publicKey.toBase58(), loaded)
