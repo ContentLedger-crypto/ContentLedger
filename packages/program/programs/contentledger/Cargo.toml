@@ -51,6 +51,12 @@ solana-sha256-hasher = "2.3"
 
 [dev-dependencies]
 mollusk-svm = "=0.15.0"
+# Без справжньої програми spl-token жоден CPI escrow не виконався б, і тести
+# доводили б лише те, що виклик складено з правильних акаунтів. Фічі за
+# замовчуванням тягнуть ще Token-2022 і ATA — обидва програмі не потрібні.
+mollusk-svm-programs-token = { version = "=0.15.0", default-features = false, features = [
+    "token",
+] }
 solana-account = "4.3"
 solana-instruction = "3.4"
 solana-pubkey = "4.2"

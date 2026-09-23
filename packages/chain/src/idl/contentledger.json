@@ -8,6 +8,89 @@
   },
   "instructions": [
     {
+      "name": "deposit",
+      "discriminator": [
+        242,
+        35,
+        198,
+        137,
+        82,
+        225,
+        242,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "consumer",
+          "docs": [
+            "Поповнює тільки власник рахунку — не з міркувань доступу до коштів",
+            "(чужі гроші тут нікому не зашкодять), а тому що депозит скасовує заявку",
+            "на вивід: інакше сторонній «дарунок» продовжував би агентові строк."
+          ],
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "consumer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "source",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "init_config",
       "discriminator": [
         23,
@@ -85,6 +168,112 @@
           "type": "i64"
         }
       ]
+    },
+    {
+      "name": "open_escrow",
+      "discriminator": [
+        82,
+        178,
+        155,
+        253,
+        74,
+        41,
+        161,
+        219
+      ],
+      "accounts": [
+        {
+          "name": "consumer",
+          "docs": [
+            "Він же платник ренти: рахунок відкривається агентом і належить агенту."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "consumer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "Валюта протоколу (FR-010). Escrow у чужому токені прийняв би платежі,",
+            "яких сетлмент не зміг би розвести отримувачам."
+          ]
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Розпоряджається сховищем сам `escrow`: ключа від нього не існує ні в",
+            "агента, ні в оператора, а рух коштів лишається всередині програми."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "ping",
@@ -296,6 +485,72 @@
       ]
     },
     {
+      "name": "request_withdraw",
+      "discriminator": [
+        137,
+        95,
+        187,
+        96,
+        250,
+        138,
+        31,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "consumer",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "docs": [
+            "Єдине місце, де читається `voucher_grace_s`. Далі діє знімок в",
+            "`Escrow::withdraw_after`, тож зміна глобального значення не рухає вже",
+            "початий відлік у жоден бік."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "consumer"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "set_domain_rates",
       "discriminator": [
         248,
@@ -454,6 +709,82 @@
           }
         }
       ]
+    },
+    {
+      "name": "withdraw",
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "consumer",
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "consumer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "destination",
+          "docs": [
+            "Куди саме забирати залишок — вибір агента: кошти його (FR-008d)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -481,6 +812,19 @@
         41,
         115,
         27
+      ]
+    },
+    {
+      "name": "Escrow",
+      "discriminator": [
+        31,
+        213,
+        123,
+        187,
+        186,
+        22,
+        218,
+        155
       ]
     },
     {
@@ -527,6 +871,21 @@
       "code": 6005,
       "name": "HostHashMismatch",
       "msg": "Хеш хоста не збігається з самим хостом"
+    },
+    {
+      "code": 6006,
+      "name": "MintMismatch",
+      "msg": "Токен не є валютою протоколу"
+    },
+    {
+      "code": 6007,
+      "name": "WithdrawNotRequested",
+      "msg": "Заявки на вивід немає"
+    },
+    {
+      "code": 6008,
+      "name": "WithdrawTooEarly",
+      "msg": "Вікно на вивід ще не минуло"
     }
   ],
   "types": [
@@ -675,6 +1034,88 @@
           },
           {
             "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "Запас під майбутні поля; змінюється тільки разом із міграцією."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Escrow",
+      "docs": [
+        "Передплачений рахунок агента. Сіди `[\"escrow\", consumer]`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "consumer",
+            "docs": [
+              "Гаманець агента. Кошти належать йому (FR-008d)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "docs": [
+              "Токен-акаунт із коштами, власний PDA `[\"vault\", escrow]`, а не ATA:",
+              "усі сіди лишаються всередині програми, а `vault_bump` поруч знімає",
+              "`find_program_address` із кожної виплати."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "settled_total",
+            "docs": [
+              "Скільки вже списано сетлментами. Різниця з `cumulative` останнього",
+              "ваучера і є сумою батча."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_seq",
+            "docs": [
+              "Номер останнього відсетленого ваучера."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_chain",
+            "docs": [
+              "Кумулятивний хеш-ланцюг на цьому ж ваучері (T011)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "withdraw_after",
+            "docs": [
+              "Знімок `Config::voucher_grace_s` у момент заявки на вивід; нуль —",
+              "заявки немає."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "vault_bump",
             "type": "u8"
           },
           {

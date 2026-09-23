@@ -80,6 +80,22 @@ pub mod contentledger {
     pub fn set_work_status(ctx: Context<UpdateWork>, status: LicenceStatus) -> Result<()> {
         instructions::registry::set_work_status(ctx, status)
     }
+
+    pub fn open_escrow(ctx: Context<OpenEscrow>) -> Result<()> {
+        instructions::escrow::open_escrow(ctx)
+    }
+
+    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+        instructions::escrow::deposit(ctx, amount)
+    }
+
+    pub fn request_withdraw(ctx: Context<RequestWithdraw>) -> Result<()> {
+        instructions::escrow::request_withdraw(ctx)
+    }
+
+    pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
+        instructions::escrow::withdraw(ctx)
+    }
 }
 
 #[derive(Accounts)]

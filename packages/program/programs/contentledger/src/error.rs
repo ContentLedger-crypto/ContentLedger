@@ -20,4 +20,10 @@ pub enum ContentLedgerError {
     Unauthorized,
     #[msg("Хеш хоста не збігається з самим хостом")]
     HostHashMismatch,
+    #[msg("Токен не є валютою протоколу")]
+    MintMismatch,
+    #[msg("Заявки на вивід немає")]
+    WithdrawNotRequested,
+    #[msg("Вікно на вивід ще не минуло")]
+    WithdrawTooEarly,
 }
