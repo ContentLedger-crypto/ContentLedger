@@ -11,6 +11,7 @@ use solana_pubkey::Pubkey;
 use std::str::FromStr;
 
 use contentledger::instructions::registry::host_seed;
+use contentledger::instructions::settle::voucher_message;
 
 const CONSUMER: &str = "7Xw3kQhVvVfN4dLpAqTzR9mBcJyU2sHnEgWxPd6ZaKtF";
 const HOST: &str = "example.com";
@@ -25,6 +26,13 @@ const WORK: (&str, u8) = ("EiH5VpKYtWGy2CX4R1Chd68LXfygYS4S22ceaoDf3pfB", 253);
 const ESCROW: (&str, u8) = ("8jpMQyQboQ22Xh1FjptmJKBvH7JHENHVT38B8FL1aoCa", 253);
 const VAULT: (&str, u8) = ("2cHpQ3ESXdF5xineBKjcJjLmJSFbCpHB5Bhp3S8M7gDC", 254);
 const LOG: (&str, u8) = ("J2qKbSJNNMX4P51RZwfMh5G7yk3zbC6x5yuDaoEmTAfd", 254);
+
+/// Ті самі входи, що в `packages/shared/src/voucher.test.ts`: підписує ваучер
+/// клієнт, а перебирає його байти програма, і розійтись їм нема де.
+const VOUCHER_SEQ: u64 = 41;
+const VOUCHER_CUMULATIVE: u64 = 88_200;
+const VOUCHER_CHAIN_HEX: &str = "4be487e42643dbfbec30ab98e5f472362ea3aad599954e8de61f543fe75da83e";
+const VOUCHER_MESSAGE_HEX: &str = "434c4447523a7631000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f290000000000000088580100000000004be487e42643dbfbec30ab98e5f472362ea3aad599954e8de61f543fe75da83e";
 
 fn program_id() -> Pubkey {
     Pubkey::new_from_array(contentledger::ID.to_bytes())
@@ -64,4 +72,19 @@ fn addresses_match_the_client() {
     let escrow = assert_pda(ESCROW, &[b"escrow", consumer.as_ref()]);
     assert_pda(VAULT, &[b"vault", escrow.as_ref()]);
     assert_pda(LOG, &[b"log", escrow.as_ref()]);
+}
+
+/// 88 байтів, які підписує агент. Вектор прибитий з обох боків: у BPF немає
+/// JSON, тож програма збирає повідомлення руками, і будь-який зсув поля тут
+/// виглядав би на devnet як «підпис не збігається», без жодної підказки де.
+#[test]
+fn voucher_message_matches_the_client() {
+    let escrow = anchor_lang::prelude::Pubkey::new_from_array(core::array::from_fn(|i| i as u8));
+    let mut chain = [0u8; 32];
+    for (byte, pair) in chain.iter_mut().zip(VOUCHER_CHAIN_HEX.as_bytes().chunks(2)) {
+        *byte = u8::from_str_radix(core::str::from_utf8(pair).expect("hex"), 16).expect("hex");
+    }
+
+    let message = voucher_message(&escrow, VOUCHER_SEQ, VOUCHER_CUMULATIVE, &chain);
+    assert_eq!(hex(&message), VOUCHER_MESSAGE_HEX);
 }

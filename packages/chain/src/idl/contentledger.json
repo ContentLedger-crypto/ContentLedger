@@ -711,6 +711,78 @@
       ]
     },
     {
+      "name": "settle_batch",
+      "discriminator": [
+        22,
+        2,
+        21,
+        223,
+        225,
+        122,
+        163,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "The settler. The agent's consent lives in the verification instruction,",
+            "not in this transaction — it is signed while the gateway serves content,",
+            "hours before anyone settles."
+          ],
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "instructions",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "seq",
+          "type": "u64"
+        },
+        {
+          "name": "cumulative",
+          "type": "u64"
+        },
+        {
+          "name": "chain",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "withdraw",
       "discriminator": [
         183,
@@ -886,6 +958,21 @@
       "code": 6008,
       "name": "WithdrawTooEarly",
       "msg": "Вікно на вивід ще не минуло"
+    },
+    {
+      "code": 6009,
+      "name": "VoucherSignatureMissing",
+      "msg": "No ed25519 verification instruction in this transaction"
+    },
+    {
+      "code": 6010,
+      "name": "VoucherSignatureMismatch",
+      "msg": "The verified signature does not cover this voucher"
+    },
+    {
+      "code": 6011,
+      "name": "StaleVoucher",
+      "msg": "The escrow has already settled this voucher"
     }
   ],
   "types": [

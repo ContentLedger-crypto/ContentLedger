@@ -26,4 +26,10 @@ pub enum ContentLedgerError {
     WithdrawNotRequested,
     #[msg("Вікно на вивід ще не минуло")]
     WithdrawTooEarly,
+    #[msg("No ed25519 verification instruction in this transaction")]
+    VoucherSignatureMissing,
+    #[msg("The verified signature does not cover this voucher")]
+    VoucherSignatureMismatch,
+    #[msg("The escrow has already settled this voucher")]
+    StaleVoucher,
 }

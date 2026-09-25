@@ -22,6 +22,11 @@ const GENESIS = '3cea1c8fb8815b13cc24bb320c9b7887ad2a0c76c96bb249720f7c550924d4e
 const CHAIN_41 = '03eacbc9e8108fd4ce05bcaef6cd3575985dbd91481528d49c8306c57489bb43'
 const CHAIN_43 = '76d68caf04cd10ad18a552310448d2891755f03d03194d2124e26502a0b0b4da'
 const CHAIN_SWAPPED = '91a49651c78568cdd13d942ed9a3cdd4cbf547fd93da982a41d4064ceb7491b3'
+// Pinned byte for byte in `programs/contentledger/tests/golden.rs`: the program
+// rebuilds these 88 bytes in BPF, and a drift would surface on devnet as a
+// signature that simply does not match, with nothing pointing at the field.
+const VOUCHER_MESSAGE =
+  '434c4447523a7631000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f290000000000000088580100000000004be487e42643dbfbec30ab98e5f472362ea3aad599954e8de61f543fe75da83e'
 
 const ESCROW_KEY = Uint8Array.from({ length: 32 }, (_, i) => i)
 const CONSUMER = '7Xw3kQhVvVfN4dLpAqTzR9mBcJyU2sHnEgWxPd6ZaKtF'
@@ -222,6 +227,7 @@ describe('voucherMessage', () => {
     expect(view.getBigUint64(40, true)).toBe(41n)
     expect(view.getBigUint64(48, true)).toBe(88_200n)
     expect(bytesToHex(bytes.subarray(56, 88))).toBe(LEAF_ESCROW)
+    expect(bytesToHex(bytes)).toBe(VOUCHER_MESSAGE)
   })
 
   it('changes when any field changes', () => {

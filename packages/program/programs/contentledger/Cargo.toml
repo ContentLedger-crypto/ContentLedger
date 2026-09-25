@@ -48,6 +48,11 @@ anchor-spl = { version = "0.32.1", default-features = false, features = [
 # 32 байтами, а хост буває на 253. Версія 2.x — та, що вже в дереві через
 # `solana-pubkey` anchor'а; на 3.x у графі була б друга копія.
 solana-sha256-hasher = "2.3"
+# Пряма залежність замість шима `anchor_lang::solana_program`: там ці функції
+# перереекспортовані з `#[deprecated]`, а гейт ганяє clippy з `-D warnings`.
+# 2.2 — та сама копія, що вже в дереві через anchor 0.32.1, тож `AccountInfo`
+# лишається одним типом.
+solana-instructions-sysvar = "2.2"
 
 [dev-dependencies]
 mollusk-svm = "=0.15.0"

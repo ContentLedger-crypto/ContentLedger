@@ -927,6 +927,7 @@ dependencies = [
  "mollusk-svm-programs-token",
  "solana-account",
  "solana-instruction 3.4.1",
+ "solana-instructions-sysvar 2.2.2",
  "solana-program-error 3.0.1",
  "solana-pubkey 4.2.1",
  "solana-sha256-hasher 2.3.0",

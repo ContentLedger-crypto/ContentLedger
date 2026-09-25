@@ -96,6 +96,15 @@ pub mod contentledger {
     pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
         instructions::escrow::withdraw(ctx)
     }
+
+    pub fn settle_batch(
+        ctx: Context<SettleBatch>,
+        seq: u64,
+        cumulative: u64,
+        chain: [u8; 32],
+    ) -> Result<()> {
+        instructions::settle::settle_batch(ctx, seq, cumulative, chain)
+    }
 }
 
 #[derive(Accounts)]
