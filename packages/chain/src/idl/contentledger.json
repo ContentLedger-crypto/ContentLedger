@@ -728,8 +728,10 @@
           "docs": [
             "The settler. The agent's consent lives in the verification instruction,",
             "not in this transaction — it is signed while the gateway serves content,",
-            "hours before anyone settles."
+            "hours before anyone settles. Also the payer of every account this",
+            "settlement creates (FR-010a): neither the agent nor a publisher is."
           ],
+          "writable": true,
           "signer": true,
           "relations": [
             "config"
@@ -758,8 +760,69 @@
           "writable": true
         },
         {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "settlement_log",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
+        },
+        {
           "name": "instructions",
           "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -778,6 +841,21 @@
               "u8",
               32
             ]
+          }
+        },
+        {
+          "name": "root",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "tariffs",
+          "type": {
+            "vec": "u64"
           }
         }
       ]
@@ -900,6 +978,19 @@
       ]
     },
     {
+      "name": "SettlementLog",
+      "discriminator": [
+        160,
+        27,
+        176,
+        16,
+        177,
+        228,
+        127,
+        214
+      ]
+    },
+    {
       "name": "Work",
       "discriminator": [
         140,
@@ -910,6 +1001,21 @@
         233,
         85,
         175
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "BatchSettled",
+      "discriminator": [
+        238,
+        14,
+        187,
+        192,
+        127,
+        95,
+        104,
+        9
       ]
     }
   ],
@@ -973,9 +1079,58 @@
       "code": 6011,
       "name": "StaleVoucher",
       "msg": "The escrow has already settled this voucher"
+    },
+    {
+      "code": 6012,
+      "name": "CumulativeBelowSettled",
+      "msg": "The voucher's cumulative total is below what the escrow has settled"
+    },
+    {
+      "code": 6013,
+      "name": "SplitMismatch",
+      "msg": "Tariffs and fee do not add up to the settled amount at the protocol fee rate"
+    },
+    {
+      "code": 6014,
+      "name": "NodeShareNotPayable",
+      "msg": "A non-zero node share has no payee until attestors exist"
+    },
+    {
+      "code": 6015,
+      "name": "PayoutAccountsMismatch",
+      "msg": "Payout accounts do not match the domains and tariffs of the batch"
     }
   ],
   "types": [
+    {
+      "name": "BatchSettled",
+      "docs": [
+        "Emitted so a verifier can tell, after the fact, at which rates a batch was",
+        "split: `Config` may change later, and the ring has no room for them — a",
+        "wider entry would push 120 of them past the CPI account-size ceiling."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "seq_end",
+            "type": "u64"
+          },
+          {
+            "name": "protocol_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "node_share_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
     {
       "name": "Config",
       "docs": [
@@ -1235,6 +1390,119 @@
           },
           {
             "name": "Suspended"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SettlementEntry",
+      "docs": [
+        "Один запис кільця: що саме було заякорено сетлментом."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seq_end",
+            "docs": [
+              "Номер останнього ваучера батча. `0` означає незайнятий слот —",
+              "`seq` починається з 1, тож окреме поле «скільки заповнено» зайве."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "ts",
+            "docs": [
+              "Час якоря за ончейн-годинником."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "root",
+            "docs": [
+              "Меркл-корінь батча квитанцій (FR-013)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "chain",
+            "docs": [
+              "Значення хеш-ланцюга на `seq_end`."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SettlementLog",
+      "docs": [
+        "Кільце останніх сетлментів escrow. Сіди `[\"log\", escrow]`.",
+        "",
+        "`zero_copy`, а не звичайний `#[account]`: 9,6 КБ не десеріалізуються в",
+        "4-КБ стек BPF. `AccountLoader` відображає памʼять напряму."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "escrow",
+            "type": "pubkey"
+          },
+          {
+            "name": "head",
+            "docs": [
+              "Індекс **наступного** запису. Занулений акаунт — коректне порожнє",
+              "кільце, і це те, що дає `init`."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "padding",
+            "docs": [
+              "Вирівнювання масиву на 8 байтів. `Pod` не терпить неявних дірок."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                6
+              ]
+            }
+          },
+          {
+            "name": "entries",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "SettlementEntry"
+                  }
+                },
+                120
+              ]
+            }
           }
         ]
       }

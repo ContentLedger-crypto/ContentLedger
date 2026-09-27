@@ -97,13 +97,15 @@ pub mod contentledger {
         instructions::escrow::withdraw(ctx)
     }
 
-    pub fn settle_batch(
-        ctx: Context<SettleBatch>,
+    pub fn settle_batch<'info>(
+        ctx: Context<'_, '_, 'info, 'info, SettleBatch<'info>>,
         seq: u64,
         cumulative: u64,
         chain: [u8; 32],
+        root: [u8; 32],
+        tariffs: Vec<u64>,
     ) -> Result<()> {
-        instructions::settle::settle_batch(ctx, seq, cumulative, chain)
+        instructions::settle::settle_batch(ctx, seq, cumulative, chain, root, tariffs)
     }
 }
 

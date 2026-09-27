@@ -25,7 +25,9 @@ custom-panic = []
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
 
 [dependencies]
-anchor-lang = "0.32.1"
+# `init-if-needed` for the settlement ring: it is created on the first
+# settlement of an escrow, paid by the operator, not by the agent at open.
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
 # Пряма залежність, а не транзитивна: макрос `zero_copy` розкривається в
 # `#[derive(bytemuck::Pod)]` і шукає крейт у корені нашого. `min_const_generics`
 # потрібен через масив кільця на 120 елементів — похідна для `Pod` без нього
@@ -38,10 +40,11 @@ bytemuck = { version = "1.25", features = ["derive", "min_const_generics"] }
 # Фіча `token_2022` увімкнена лише тому, що в anchor-spl 0.32.1 `idl_build.rs`
 # не загороджений `#[cfg]` і безумовно згадує `crate::token_interface` — без неї
 # падає не наша збірка, а генерація IDL у чужому крейті.
-# `associated_token` під'їде на T025, коли з'являться виплати отримувачам.
+# `associated_token` creates a recipient's token account on first payout (FR-010a).
 anchor-spl = { version = "0.32.1", default-features = false, features = [
     "token",
     "token_2022",
+    "associated_token",
 ] }
 # У шимі `anchor_lang::solana_program` крейти Solana розʼїхались, і модуля
 # `hash` там немає. Хешувати хост доводиться саме в програмі: сід обмежений
@@ -58,9 +61,11 @@ solana-instructions-sysvar = "2.2"
 mollusk-svm = "=0.15.0"
 # Без справжньої програми spl-token жоден CPI escrow не виконався б, і тести
 # доводили б лише те, що виклик складено з правильних акаунтів. Фічі за
-# замовчуванням тягнуть ще Token-2022 і ATA — обидва програмі не потрібні.
+# замовчуванням тягнуть ще Token-2022, який програмі не потрібен.
+# The ATA program runs for real too: settlement creates recipient accounts.
 mollusk-svm-programs-token = { version = "=0.15.0", default-features = false, features = [
     "token",
+    "associated-token",
 ] }
 solana-account = "4.3"
 solana-instruction = "3.4"

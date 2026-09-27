@@ -32,4 +32,12 @@ pub enum ContentLedgerError {
     VoucherSignatureMismatch,
     #[msg("The escrow has already settled this voucher")]
     StaleVoucher,
+    #[msg("The voucher's cumulative total is below what the escrow has settled")]
+    CumulativeBelowSettled,
+    #[msg("Tariffs and fee do not add up to the settled amount at the protocol fee rate")]
+    SplitMismatch,
+    #[msg("A non-zero node share has no payee until attestors exist")]
+    NodeShareNotPayable,
+    #[msg("Payout accounts do not match the domains and tariffs of the batch")]
+    PayoutAccountsMismatch,
 }
