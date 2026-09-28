@@ -1,6 +1,14 @@
 import { PublicKey } from '@solana/web3.js'
 import { describe, expect, it } from 'vitest'
-import { configPda, domainPda, escrowPda, settlementLogPda, vaultPda, workPda } from './pda.js'
+import {
+  associatedTokenAddress,
+  configPda,
+  domainPda,
+  escrowPda,
+  settlementLogPda,
+  vaultPda,
+  workPda,
+} from './pda.js'
 import { PROGRAM_ID } from './program.js'
 
 const consumer = new PublicKey('7Xw3kQhVvVfN4dLpAqTzR9mBcJyU2sHnEgWxPd6ZaKtF')
@@ -57,5 +65,24 @@ describe('деривація PDA', () => {
 
   it('неканонічний хост не доходить до деривації', () => {
     expect(() => domainPda('Example.com')).toThrow()
+  })
+})
+
+describe('associatedTokenAddress', () => {
+  const mint = new PublicKey('F2snBajNcBXZ6GheR5LPhMvc9Ai2vG9uGweXrciNM1oF')
+
+  // Vectors from @solana/spl-token getAssociatedTokenAddressSync; the first one is
+  // the live devnet treasury that init_config accepted.
+  it.each([
+    [
+      '2nfDE4vfx7aBkjucAJzo7tegmkbMzJ52ambqoguHkgsm',
+      'HM8EYSNJMxvfrpi1FM31BPpCbgd3p2zbEd9K9re4WgwZ',
+    ],
+    [
+      'FKoKPEnGHQsawTzHpWCvWj1WxAtwFCbZqZEWV4D3JoLM',
+      'H4g3tncAE1YGyHAwCB16SGxghVPK4etZgUE3K3e7tH2b',
+    ],
+  ])('derives the legacy SPL Token ATA of %s', (owner, ata) => {
+    expect(associatedTokenAddress(new PublicKey(owner), mint).toBase58()).toBe(ata)
   })
 })

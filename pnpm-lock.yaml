@@ -67,6 +67,40 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@1.21.7)(tsx@4.23.13))
 
+  apps/gateway:
+    dependencies:
+      '@contentledger/chain':
+        specifier: workspace:*
+        version: link:../../packages/chain
+      '@contentledger/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@hono/node-server':
+        specifier: 2.1.1
+        version: 2.1.1(hono@4.13.5)
+      '@solana/web3.js':
+        specifier: 'catalog:'
+        version: 1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      hono:
+        specifier: 4.13.5
+        version: 4.13.5
+      tsx:
+        specifier: 4.23.13
+        version: 4.23.13
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
+    devDependencies:
+      '@coral-xyz/anchor':
+        specifier: 'catalog:'
+        version: 0.32.1(bufferutil@4.1.0)(typescript@5.9.3)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@1.21.7)(tsx@4.23.13))
+
   apps/web:
     dependencies:
       react:

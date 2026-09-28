@@ -32,3 +32,19 @@ export const escrowPda = (consumer: PublicKey): Pda => derive([ESCROW_SEED, cons
 export const vaultPda = (escrow: PublicKey): Pda => derive([VAULT_SEED, escrow.toBuffer()])
 
 export const settlementLogPda = (escrow: PublicKey): Pda => derive([LOG_SEED, escrow.toBuffer()])
+
+const TOKEN_PROGRAM_ID = new Web3PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+const ASSOCIATED_TOKEN_PROGRAM_ID = new Web3PublicKey(
+  'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+)
+
+/**
+ * Where `settle_batch` pays a recipient (FR-010a). Derived here rather than taken
+ * from `@solana/spl-token` so the gateway does not pull the whole token client
+ * for one seed list.
+ */
+export const associatedTokenAddress = (owner: PublicKey, mint: PublicKey): PublicKey =>
+  Web3PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  )[0]

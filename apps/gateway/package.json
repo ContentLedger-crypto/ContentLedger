@@ -1,0 +1,26 @@
+{
+  "name": "@contentledger/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --import tsx --watch src/server.ts",
+    "start": "node --env-file-if-exists=../../.env --import tsx src/server.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@contentledger/chain": "workspace:*",
+    "@contentledger/shared": "workspace:*",
+    "@hono/node-server": "2.1.1",
+    "@solana/web3.js": "catalog:",
+    "hono": "4.13.5",
+    "tsx": "4.23.13",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@coral-xyz/anchor": "catalog:",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

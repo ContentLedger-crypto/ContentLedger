@@ -11,7 +11,7 @@ import { verifyX402Payment, x402ProofMessage } from './x402.js'
 
 const TOKEN_PROGRAM = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
 const TOKEN_2022_PROGRAM = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
-const ATA_PROGRAM = new PublicKey('ATokenGPvbdGVxr1b2hvZbsL5WeUyvGSQX7N7hwVTzAh')
+const ATA_PROGRAM = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL')
 
 const payerSeed = new Uint8Array(32).fill(7)
 const strangerSeed = new Uint8Array(32).fill(9)
