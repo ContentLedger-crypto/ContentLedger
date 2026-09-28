@@ -17,8 +17,10 @@
   "dependencies": {
     "@contentledger/shared": "workspace:*",
     "@coral-xyz/anchor": "catalog:",
+    "@noble/curves": "1.9.7",
     "@noble/hashes": "1.8.0",
-    "@solana/web3.js": "catalog:"
+    "@solana/web3.js": "catalog:",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/node": "22.13.1",
