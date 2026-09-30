@@ -37,6 +37,18 @@ export interface Domain {
   bump: number
 }
 
+export interface Escrow {
+  consumer: string
+  vault: string
+  settledTotal: bigint
+  lastSeq: bigint
+  lastChain: string
+  /** Zero means no withdrawal has been requested. */
+  withdrawAfter: bigint
+  bump: number
+  vaultBump: number
+}
+
 export interface Work {
   domain: string
   sourceHash: string
@@ -102,4 +114,31 @@ export function decodeWork(data: Uint8Array): Work {
     attestedBy: account.attested_by,
     bump: account.bump,
   }
+}
+
+export function decodeEscrow(data: Uint8Array): Escrow {
+  const account = raw('Escrow', data)
+  return {
+    consumer: key(account.consumer),
+    vault: key(account.vault),
+    settledTotal: big(account.settled_total),
+    lastSeq: big(account.last_seq),
+    lastChain: hex(account.last_chain),
+    withdrawAfter: big(account.withdraw_after),
+    bump: account.bump,
+    vaultBump: account.vault_bump,
+  }
+}
+
+const TOKEN_ACCOUNT_BYTES = 165
+const TOKEN_AMOUNT_OFFSET = 64
+
+/** Amount of a legacy SPL token account: mint(32) ‖ owner(32) ‖ amount(u64 LE) ‖ … */
+export function decodeTokenAmount(data: Uint8Array): bigint {
+  if (data.length !== TOKEN_ACCOUNT_BYTES) {
+    throw new Error(`not a token account: ${data.length} bytes, expected ${TOKEN_ACCOUNT_BYTES}`)
+  }
+  return Buffer.from(data.buffer, data.byteOffset, data.byteLength).readBigUInt64LE(
+    TOKEN_AMOUNT_OFFSET,
+  )
 }

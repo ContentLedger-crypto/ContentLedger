@@ -1,7 +1,13 @@
 import { BN } from '@coral-xyz/anchor'
 import { Keypair } from '@solana/web3.js'
 import { describe, expect, it } from 'vitest'
-import { decodeConfig, decodeDomain, decodeWork } from './accounts.js'
+import {
+  decodeConfig,
+  decodeDomain,
+  decodeEscrow,
+  decodeTokenAmount,
+  decodeWork,
+} from './accounts.js'
 import { coder } from './program.js'
 
 const authority = Keypair.generate().publicKey
@@ -103,5 +109,64 @@ describe('декодери', () => {
     const bytes = await encodeDomain()
     bytes[0] = (bytes[0] ?? 0) ^ 0xff
     expect(() => decodeDomain(bytes)).toThrow()
+  })
+})
+
+const encodeEscrow = (withdrawAfter: number) =>
+  coder.accounts.encode('Escrow', {
+    consumer: owner,
+    vault: domainKey,
+    settled_total: new BN('18446744073709551615'),
+    last_seq: new BN(41),
+    last_chain: Array(32).fill(0xab),
+    withdraw_after: new BN(withdrawAfter),
+    bump: 251,
+    vault_bump: 250,
+    reserved: Array(32).fill(0),
+  })
+
+describe('decodeEscrow', () => {
+  it('decodes every field in application form', async () => {
+    const escrow = decodeEscrow(await encodeEscrow(1_790_000_000))
+    expect(escrow).toEqual({
+      consumer: owner.toBase58(),
+      vault: domainKey.toBase58(),
+      settledTotal: 18_446_744_073_709_551_615n,
+      lastSeq: 41n,
+      lastChain: 'ab'.repeat(32),
+      withdrawAfter: 1_790_000_000n,
+      bump: 251,
+      vaultBump: 250,
+    })
+  })
+
+  it('keeps a zero withdraw_after as 0n, the "no request" marker', async () => {
+    expect(decodeEscrow(await encodeEscrow(0)).withdrawAfter).toBe(0n)
+  })
+
+  it('rejects another account type', async () => {
+    const bytes = await encodeDomain()
+    expect(() => decodeEscrow(bytes)).toThrow()
+  })
+})
+
+describe('decodeTokenAmount', () => {
+  const tokenAccount = (amount: bigint, length = 165) => {
+    const data = Buffer.alloc(length)
+    data.fill(0x77, 0, 64)
+    data.writeBigUInt64LE(amount, 64)
+    return new Uint8Array(data)
+  }
+
+  it('reads the full u64 range exactly', () => {
+    expect(decodeTokenAmount(tokenAccount(18_446_744_073_709_551_615n))).toBe(
+      18_446_744_073_709_551_615n,
+    )
+    expect(decodeTokenAmount(tokenAccount(0n))).toBe(0n)
+  })
+
+  it('rejects data that is not a legacy token account', () => {
+    expect(() => decodeTokenAmount(tokenAccount(5n, 82))).toThrow(/token account/)
+    expect(() => decodeTokenAmount(tokenAccount(5n, 170))).toThrow(/token account/)
   })
 })
