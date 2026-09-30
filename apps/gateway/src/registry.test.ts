@@ -67,9 +67,9 @@ function connection(infos: Array<AccountInfo<Buffer> | null>) {
   const calls: Array<{ keys: string[]; commitment: Commitment | undefined }> = []
   return {
     calls,
-    getMultipleAccountsInfo: async (keys: PublicKey[], commitment?: Commitment) => {
+    getMultipleAccountsInfoAndContext: async (keys: PublicKey[], commitment?: Commitment) => {
       calls.push({ keys: keys.map((k) => k.toBase58()), commitment })
-      return infos
+      return { context: { slot: 431_000_123 }, value: infos }
     },
   }
 }
@@ -172,6 +172,8 @@ describe('rpcRegistry.readWithEscrow', () => {
       account: expect.objectContaining({ settledTotal: 5000n, lastSeq: 3n, withdrawAfter: 0n }),
       vaultBalance: 7000n,
     })
+    // The mirror written from this snapshot is ordered by it.
+    expect(snapshot.slot).toBe(431_000_123n)
   })
 
   it('reports an escrow that was never opened as null', async () => {

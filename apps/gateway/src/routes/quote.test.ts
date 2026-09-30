@@ -11,7 +11,8 @@ import { PublicKey } from '@solana/web3.js'
 import { describe, expect, it, vi } from 'vitest'
 import { createApp } from '../app.js'
 import type { RegistryReader, RegistrySnapshot } from '../registry.js'
-import { paymentRequired, quoteFor, x402Legs } from './quote.js'
+import type { EscrowReceiptBody } from '../voucher.js'
+import { paymentRequired, quoteFor, quoteRoutes, x402Legs } from './quote.js'
 
 const MINT = 'F2snBajNcBXZ6GheR5LPhMvc9Ai2vG9uGweXrciNM1oF'
 const TREASURY_ATA = 'HM8EYSNJMxvfrpi1FM31BPpCbgd3p2zbEd9K9re4WgwZ'
@@ -141,7 +142,7 @@ describe('quoteFor', () => {
 describe('paymentRequired', () => {
   it('offers both methods with tariff and fee as separate amounts', () => {
     const quote = quoted(quoteFor(snapshot(), 'train'))
-    expect(paymentRequired(quote)).toEqual({
+    expect(paymentRequired(quote, { unavailable: 'consumer-required' })).toEqual({
       error: {
         code: 'PAYMENT_REQUIRED',
         message: expect.any(String),
@@ -155,7 +156,12 @@ describe('paymentRequired', () => {
           decimals: 6,
           rateLevel: 'domain',
           methods: [
-            { kind: 'escrow', program: PROGRAM_ID.toBase58(), amount: '2200' },
+            {
+              kind: 'escrow',
+              program: PROGRAM_ID.toBase58(),
+              amount: '2200',
+              unavailable: 'consumer-required',
+            },
             {
               kind: 'x402',
               legs: [
@@ -172,11 +178,42 @@ describe('paymentRequired', () => {
   it('offers only a zero escrow voucher for a free work, so the issuance still gets a receipt', () => {
     const quote = quoted(quoteFor(snapshot({ domain: domain({ rateTrain: 0n }) }), 'train'))
     expect(x402Legs(quote)).toEqual([])
-    expect(paymentRequired(quote).error.details).toMatchObject({
+    expect(
+      paymentRequired(quote, { unavailable: 'consumer-required' }).error.details,
+    ).toMatchObject({
       tariff: '0',
       fee: '0',
       total: '0',
       methods: [{ kind: 'escrow', program: PROGRAM_ID.toBase58(), amount: '0' }],
+    })
+  })
+
+  it('carries the draft to sign, with money as strings and the expiry as ISO time', () => {
+    const quote = quoted(quoteFor(snapshot(), 'train'))
+    const body = { seq: 3 } as unknown as EscrowReceiptBody
+    const details = paymentRequired(
+      quote,
+      {
+        offer: {
+          id: 'offer-id',
+          body,
+          cumulativeAfter: 6600n,
+          expiresAt: new Date('2026-09-30T10:01:00.000Z'),
+        },
+      },
+      'offer-expired',
+    ).error.details
+    expect(details.reason).toBe('offer-expired')
+    expect(details.methods[0]).toEqual({
+      kind: 'escrow',
+      program: PROGRAM_ID.toBase58(),
+      amount: '2200',
+      offer: {
+        id: 'offer-id',
+        body,
+        cumulativeAfter: '6600',
+        expiresAt: '2026-09-30T10:01:00.000Z',
+      },
     })
   })
 
@@ -197,7 +234,7 @@ describe('GET /v1/quote', () => {
         return result
       },
     }
-    return { calls, app: createApp({ registry }) }
+    return { calls, app: createApp(quoteRoutes(registry)) }
   }
   const url = (source: string, use = 'train') =>
     `/v1/quote?source=${encodeURIComponent(source)}&use=${use}`

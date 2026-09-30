@@ -16,7 +16,9 @@ import { PublicKey } from '@solana/web3.js'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { apiError } from '../errors.js'
+import type { FundsRejection } from '../escrow.js'
 import type { RegistryReader, RegistrySnapshot } from '../registry.js'
+import type { EscrowReceiptBody } from '../voucher.js'
 
 export interface Quote {
   work: string
@@ -93,8 +95,35 @@ export function x402Legs(quote: Quote): X402Leg[] {
   ].filter((leg) => leg.amount > 0n)
 }
 
-function paymentMethods(quote: Quote) {
-  const escrow = { kind: 'escrow', program: PROGRAM_ID.toBase58(), amount: quote.total.toString() }
+/** Either a draft to sign, or why the escrow path cannot take this request right now. */
+export type EscrowTerms =
+  | {
+      offer: {
+        id: string
+        body: EscrowReceiptBody
+        cumulativeAfter: bigint
+        expiresAt: Date
+      }
+    }
+  | { unavailable: 'consumer-required' | FundsRejection }
+
+function escrowMethod(quote: Quote, terms: EscrowTerms) {
+  const method = { kind: 'escrow', program: PROGRAM_ID.toBase58(), amount: quote.total.toString() }
+  if ('unavailable' in terms) return { ...method, unavailable: terms.unavailable }
+  const { id, body, cumulativeAfter, expiresAt } = terms.offer
+  return {
+    ...method,
+    offer: {
+      id,
+      body,
+      cumulativeAfter: cumulativeAfter.toString(),
+      expiresAt: expiresAt.toISOString(),
+    },
+  }
+}
+
+function paymentMethods(quote: Quote, terms: EscrowTerms) {
+  const escrow = escrowMethod(quote, terms)
   const legs = x402Legs(quote)
   // A free work is still issued against a voucher: every issuance has a payer and a
   // receipt (FR-012), and an x402 payment of nothing does not exist.
@@ -108,8 +137,10 @@ function paymentMethods(quote: Quote) {
   ]
 }
 
-export function paymentRequired(quote: Quote) {
+/** `reason` is set when a voucher came for an offer the gateway no longer holds. */
+export function paymentRequired(quote: Quote, terms: EscrowTerms, reason?: 'offer-expired') {
   return apiError('PAYMENT_REQUIRED', 'this work is licensed per request; pay to receive it', {
+    ...(reason && { reason }),
     work: quote.work,
     useType: quote.useType,
     tariff: quote.tariff.toString(),
@@ -118,7 +149,7 @@ export function paymentRequired(quote: Quote) {
     currency: 'USDC',
     decimals: USDC_DECIMALS,
     rateLevel: quote.rateLevel,
-    methods: paymentMethods(quote),
+    methods: paymentMethods(quote, terms),
   })
 }
 
@@ -130,7 +161,7 @@ const canonicalSource = z.string().refine((source) => {
   }
 }, 'expected a canonical https source URL')
 
-const quoteQuery = z.object({ source: canonicalSource, use: useTypeSchema })
+export const quoteQuery = z.object({ source: canonicalSource, use: useTypeSchema })
 
 export function quoteRoutes(registry: RegistryReader): Hono {
   const app = new Hono()

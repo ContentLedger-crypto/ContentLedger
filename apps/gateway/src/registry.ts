@@ -38,6 +38,8 @@ export interface EscrowSnapshot {
 
 export interface PaidRegistrySnapshot extends RegistrySnapshot {
   escrow: EscrowSnapshot | null
+  /** Orders the registry mirror written from this snapshot. */
+  slot: bigint
 }
 
 export interface RegistryReader {
@@ -48,7 +50,7 @@ export interface PaidRegistryReader extends RegistryReader {
   readWithEscrow(source: string, escrow: PublicKey): Promise<PaidRegistrySnapshot>
 }
 
-type AccountsReader = Pick<Connection, 'getMultipleAccountsInfo'>
+type AccountsReader = Pick<Connection, 'getMultipleAccountsInfoAndContext'>
 
 /**
  * Read on every request rather than cached: a price the agent signs into a voucher
@@ -61,10 +63,11 @@ export function rpcRegistry(connection: AccountsReader): PaidRegistryReader {
     const config = configPda()[0]
     const domain = domainPda(hostOf(source))[0]
     const work = workPda(source)[0]
-    const [configInfo, domainInfo, workInfo, ...rest] = await connection.getMultipleAccountsInfo(
+    const { context, value } = await connection.getMultipleAccountsInfoAndContext(
       [config, domain, work, ...extra],
       'confirmed',
     )
+    const [configInfo, domainInfo, workInfo, ...rest] = value
     if (!configInfo) throw new Error(`Config account ${config.toBase58()} does not exist`)
 
     const snapshot: RegistrySnapshot = {
@@ -74,7 +77,7 @@ export function rpcRegistry(connection: AccountsReader): PaidRegistryReader {
         : null,
       work: workInfo ? { address: work.toBase58(), account: decodeWork(workInfo.data) } : null,
     }
-    return { snapshot, rest }
+    return { snapshot, rest, slot: BigInt(context.slot) }
   }
 
   return {
@@ -84,8 +87,12 @@ export function rpcRegistry(connection: AccountsReader): PaidRegistryReader {
 
     async readWithEscrow(source, escrow) {
       const vault = vaultPda(escrow)[0]
-      const { snapshot, rest } = await readAccounts(source, [escrow, vault])
-      return { ...snapshot, escrow: escrowSnapshot(escrow, rest[0] ?? null, rest[1] ?? null) }
+      const { snapshot, rest, slot } = await readAccounts(source, [escrow, vault])
+      return {
+        ...snapshot,
+        escrow: escrowSnapshot(escrow, rest[0] ?? null, rest[1] ?? null),
+        slot,
+      }
     },
   }
 }

@@ -75,6 +75,9 @@ importers:
       '@contentledger/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@contentledger/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
       '@contentledger/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -96,6 +99,9 @@ importers:
       hono:
         specifier: 4.13.5
         version: 4.13.5
+      postgres:
+        specifier: 3.4.9
+        version: 3.4.9
       tsx:
         specifier: 4.23.13
         version: 4.23.13

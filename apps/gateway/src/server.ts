@@ -1,21 +1,46 @@
 import { serve } from '@hono/node-server'
 import { Connection } from '@solana/web3.js'
+import { drizzle } from 'drizzle-orm/postgres-js'
+import postgres from 'postgres'
 import { z } from 'zod'
 import { createApp } from './app.js'
+import { offerStore } from './offers.js'
+import { fixturesOrigin } from './origin.js'
 import { rpcRegistry } from './registry.js'
+import { contentRoutes } from './routes/content.js'
+import { quoteRoutes } from './routes/quote.js'
 
 const env = z
   .object({
     SOLANA_RPC_URL: z.url(),
+    DATABASE_URL: z.url(),
+    FIXTURES_BASE_URL: z.url(),
     PORT: z.coerce.number().int().positive().default(8879),
   })
   .parse(process.env)
 
-const app = createApp({ registry: rpcRegistry(new Connection(env.SOLANA_RPC_URL, 'confirmed')) })
+const OFFER_TTL_MS = 60_000
+const OFFER_MAX_BYTES = 32 * 1024 * 1024
+
+// The transaction pooler (6543) does not keep prepared statements across transactions.
+const sql = postgres(env.DATABASE_URL, { prepare: false })
+const registry = rpcRegistry(new Connection(env.SOLANA_RPC_URL, 'confirmed'))
+const now = () => new Date()
+
+const app = createApp(
+  quoteRoutes(registry),
+  contentRoutes({
+    registry,
+    db: drizzle(sql),
+    origin: fixturesOrigin(env.FIXTURES_BASE_URL),
+    offers: offerStore({ ttlMs: OFFER_TTL_MS, maxBytes: OFFER_MAX_BYTES, now }),
+    now,
+  }),
+)
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`gateway listening on http://localhost:${info.port}`)
 })
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(signal, () => server.close())
+  process.on(signal, () => server.close(() => void sql.end({ timeout: 5 })))
 }

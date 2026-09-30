@@ -1,15 +1,10 @@
 import { Hono } from 'hono'
 import { apiError } from './errors.js'
-import type { RegistryReader } from './registry.js'
-import { quoteRoutes } from './routes/quote.js'
 
-export interface GatewayDeps {
-  registry: RegistryReader
-}
-
-export function createApp({ registry }: GatewayDeps): Hono {
+/** Route groups arrive built, each with its own dependencies; this adds what they share. */
+export function createApp(...routes: Hono[]): Hono {
   const app = new Hono()
-  app.route('/', quoteRoutes(registry))
+  for (const group of routes) app.route('/', group)
 
   // RPC errors carry the provider URL, and with it the API key: neither the client
   // nor the host's log may see it.
