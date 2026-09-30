@@ -79,3 +79,11 @@ describe('перша міграція', () => {
     expect(sql).toContain('works_source_id_idx')
   })
 })
+
+describe('x402 payment accepted once (FR-009)', () => {
+  it('makes the payment transaction signature unique across receipts', () => {
+    expect(sql).toContain(
+      'CREATE UNIQUE INDEX "receipts_payment_ref_idx" ON "receipts" USING btree ("payment_ref")',
+    )
+  })
+})

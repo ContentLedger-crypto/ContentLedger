@@ -11,16 +11,19 @@
   },
   "dependencies": {
     "@contentledger/chain": "workspace:*",
+    "@contentledger/db": "workspace:*",
     "@contentledger/shared": "workspace:*",
     "@coral-xyz/anchor": "catalog:",
     "@hono/node-server": "2.1.1",
     "@noble/curves": "1.9.7",
     "@solana/web3.js": "catalog:",
+    "drizzle-orm": "0.45.2",
     "hono": "4.13.5",
     "tsx": "4.23.13",
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   }

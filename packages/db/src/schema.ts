@@ -188,6 +188,9 @@ export const receipts = pgTable(
     index('receipts_consumer_idx').on(table.consumer, table.acceptedTs),
     index('receipts_work_idx').on(table.workId, table.acceptedTs),
     index('receipts_batch_idx').on(table.batchId),
+    // A transaction signature is public once it lands; without this the same payment
+    // would buy content again for whoever replays it (FR-009). NULLs (escrow) stay distinct.
+    uniqueIndex('receipts_payment_ref_idx').on(table.paymentRef),
     check('receipts_tariff_non_negative', sql`${table.tariff} >= 0`),
     check('receipts_fee_non_negative', sql`${table.fee} >= 0`),
     check('receipts_node_cut_non_negative', sql`${table.nodeCut} >= 0`),

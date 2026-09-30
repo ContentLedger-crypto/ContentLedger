@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "receipts_payment_ref_idx" ON "receipts" USING btree ("payment_ref");
