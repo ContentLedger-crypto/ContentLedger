@@ -148,7 +148,9 @@ export const batches = pgTable(
     publishedAt: timestamp('published_at', { withTimezone: true }).notNull(),
   },
   (table) => [
-    index('batches_consumer_idx').on(table.consumer, table.seqTo),
+    // The public lookup key, and the escrow's settlement ring is keyed by seq_end too:
+    // a second row would make GET /v1/batches pick one of two compositions.
+    uniqueIndex('batches_consumer_idx').on(table.consumer, table.seqTo),
     check('batches_range_ordered', sql`${table.seqTo} >= ${table.seqFrom}`),
     check('batches_seq_from_positive', sql`${table.seqFrom} >= 1`),
     denyAll('batches'),

@@ -87,3 +87,11 @@ describe('x402 payment accepted once (FR-009)', () => {
     )
   })
 })
+
+describe('one published composition per batch key (FR-013b)', () => {
+  it('makes (consumer, seq_to) unique, as the settlement ring keys it', () => {
+    expect(sql).toContain(
+      'CREATE UNIQUE INDEX "batches_consumer_idx" ON "batches" USING btree ("consumer","seq_to")',
+    )
+  })
+})

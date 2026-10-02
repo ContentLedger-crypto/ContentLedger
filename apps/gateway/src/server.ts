@@ -9,6 +9,7 @@ import { fixturesOrigin } from './origin.js'
 import { rpcPayments } from './payments.js'
 import { rpcRegistry } from './registry.js'
 import { contentRoutes } from './routes/content.js'
+import { publicRoutes } from './routes/public.js'
 import { quoteRoutes } from './routes/quote.js'
 
 const env = z
@@ -25,6 +26,7 @@ const OFFER_MAX_BYTES = 32 * 1024 * 1024
 
 // The transaction pooler (6543) does not keep prepared statements across transactions.
 const sql = postgres(env.DATABASE_URL, { prepare: false })
+const db = drizzle(sql)
 const registry = rpcRegistry(new Connection(env.SOLANA_RPC_URL, 'confirmed'))
 const now = () => new Date()
 
@@ -32,12 +34,13 @@ const app = createApp(
   quoteRoutes(registry),
   contentRoutes({
     registry,
-    db: drizzle(sql),
+    db,
     origin: fixturesOrigin(env.FIXTURES_BASE_URL),
     offers: offerStore({ ttlMs: OFFER_TTL_MS, maxBytes: OFFER_MAX_BYTES, now }),
     payments: rpcPayments(env.SOLANA_RPC_URL),
     now,
   }),
+  publicRoutes(db),
 )
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`gateway listening on http://localhost:${info.port}`)
