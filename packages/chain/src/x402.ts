@@ -1,11 +1,6 @@
 import { usdcAmountSchema } from '@contentledger/shared'
 import { utils } from '@coral-xyz/anchor'
 import { ed25519 } from '@noble/curves/ed25519'
-import type {
-  ParsedInstruction,
-  ParsedTransactionWithMeta,
-  PartiallyDecodedInstruction,
-} from '@solana/web3.js'
 import { PublicKey } from '@solana/web3.js'
 import { z } from 'zod'
 
@@ -33,6 +28,30 @@ const tokenTransfer = z.discriminatedUnion('type', [
     }),
   }),
 ])
+
+// Instructions of programs the node cannot decode come without `parsed`.
+const rpcInstruction = z.object({ programId: z.string(), parsed: z.unknown().optional() })
+
+/**
+ * The part of a `getTransaction` answer in `encoding: 'jsonParsed'` that the check reads,
+ * spelled out rather than taken from `@solana/web3.js` 1.x: that client rejects version 1
+ * transactions outright, and a payer's wallet chooses the version, not the gateway.
+ * Fields a newer version adds pass through untouched.
+ */
+export const x402TransactionSchema = z.object({
+  meta: z
+    .object({
+      err: z.unknown(),
+      innerInstructions: z.array(z.object({ instructions: z.array(rpcInstruction) })).nullish(),
+    })
+    .nullable(),
+  transaction: z.object({
+    signatures: z.array(z.string()),
+    message: z.object({ instructions: z.array(rpcInstruction) }),
+  }),
+})
+
+export type X402Transaction = z.infer<typeof x402TransactionSchema>
 
 export interface X402Leg {
   /** Token account, not wallet: the recipient ATA or `Config::treasury_ata`. */
@@ -78,7 +97,7 @@ export function x402ProofMessage(signature: string): Uint8Array {
  * state, and it lives with whoever stores receipts.
  */
 export function verifyX402Payment(
-  tx: ParsedTransactionWithMeta | null,
+  tx: X402Transaction | null,
   expected: X402Expectation,
 ): X402Verdict {
   const owed = expectedLegs(expected.legs)
@@ -122,7 +141,7 @@ function expectedLegs(legs: readonly X402Leg[]): Map<string, bigint> {
   return owed
 }
 
-function* legTransfers(tx: ParsedTransactionWithMeta, owed: Map<string, bigint>) {
+function* legTransfers(tx: X402Transaction, owed: Map<string, bigint>) {
   const inner = (tx.meta?.innerInstructions ?? []).flatMap((group) => group.instructions)
   for (const ix of [...tx.transaction.message.instructions, ...inner]) {
     const transfer = asTokenTransfer(ix)
@@ -130,8 +149,8 @@ function* legTransfers(tx: ParsedTransactionWithMeta, owed: Map<string, bigint>)
   }
 }
 
-function asTokenTransfer(ix: ParsedInstruction | PartiallyDecodedInstruction) {
-  if (!('parsed' in ix) || ix.programId.toBase58() !== TOKEN_PROGRAM_ID) return null
+function asTokenTransfer(ix: z.infer<typeof rpcInstruction>) {
+  if (ix.programId !== TOKEN_PROGRAM_ID) return null
   const parsed = tokenTransfer.safeParse(ix.parsed)
   if (!parsed.success) return null
   const { info } = parsed.data

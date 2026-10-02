@@ -102,6 +102,7 @@ describe('rpcRegistry', () => {
       address: workPda(SOURCE)[0].toBase58(),
       account: expect.objectContaining({ rateTrain: 9000n, rateInference: null }),
     })
+    expect(snapshot.slot).toBe(431_000_123n)
   })
 
   it('reports absent domain and work as null', async () => {

@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { createApp } from './app.js'
 import { offerStore } from './offers.js'
 import { fixturesOrigin } from './origin.js'
+import { rpcPayments } from './payments.js'
 import { rpcRegistry } from './registry.js'
 import { contentRoutes } from './routes/content.js'
 import { quoteRoutes } from './routes/quote.js'
@@ -34,6 +35,7 @@ const app = createApp(
     db: drizzle(sql),
     origin: fixturesOrigin(env.FIXTURES_BASE_URL),
     offers: offerStore({ ttlMs: OFFER_TTL_MS, maxBytes: OFFER_MAX_BYTES, now }),
+    payments: rpcPayments(env.SOLANA_RPC_URL),
     now,
   }),
 )

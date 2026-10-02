@@ -36,10 +36,13 @@ export interface EscrowSnapshot {
   vaultBalance: bigint
 }
 
-export interface PaidRegistrySnapshot extends RegistrySnapshot {
-  escrow: EscrowSnapshot | null
+export interface SlottedRegistrySnapshot extends RegistrySnapshot {
   /** Orders the registry mirror written from this snapshot. */
   slot: bigint
+}
+
+export interface PaidRegistrySnapshot extends SlottedRegistrySnapshot {
+  escrow: EscrowSnapshot | null
 }
 
 export interface RegistryReader {
@@ -47,6 +50,7 @@ export interface RegistryReader {
 }
 
 export interface PaidRegistryReader extends RegistryReader {
+  read(source: string): Promise<SlottedRegistrySnapshot>
   readWithEscrow(source: string, escrow: PublicKey): Promise<PaidRegistrySnapshot>
 }
 
@@ -82,7 +86,8 @@ export function rpcRegistry(connection: AccountsReader): PaidRegistryReader {
 
   return {
     async read(source) {
-      return (await readAccounts(source, [])).snapshot
+      const { snapshot, slot } = await readAccounts(source, [])
+      return { ...snapshot, slot }
     },
 
     async readWithEscrow(source, escrow) {

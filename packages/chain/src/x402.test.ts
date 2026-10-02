@@ -1,17 +1,18 @@
+import { readFileSync } from 'node:fs'
 import { utils } from '@coral-xyz/anchor'
 import { ed25519 } from '@noble/curves/ed25519'
-import {
-  type ParsedInstruction,
-  type ParsedTransactionWithMeta,
-  type PartiallyDecodedInstruction,
-  PublicKey,
-} from '@solana/web3.js'
+import { PublicKey } from '@solana/web3.js'
 import { describe, expect, it } from 'vitest'
-import { verifyX402Payment, x402ProofMessage } from './x402.js'
+import {
+  verifyX402Payment,
+  type X402Transaction,
+  x402ProofMessage,
+  x402TransactionSchema,
+} from './x402.js'
 
-const TOKEN_PROGRAM = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-const TOKEN_2022_PROGRAM = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb')
-const ATA_PROGRAM = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL')
+const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+const ATA_PROGRAM = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
 
 const payerSeed = new Uint8Array(32).fill(7)
 const strangerSeed = new Uint8Array(32).fill(9)
@@ -29,9 +30,9 @@ const legs = [
   { destination: treasuryAta, amount: 200n },
 ]
 
-type Ix = ParsedInstruction | PartiallyDecodedInstruction
+type Ix = Record<string, unknown>
 
-function transfer(destination: string, amount: bigint, authority = payer): ParsedInstruction {
+function transfer(destination: string, amount: bigint, authority = payer): Ix {
   return {
     program: 'spl-token',
     programId: TOKEN_PROGRAM,
@@ -42,7 +43,7 @@ function transfer(destination: string, amount: bigint, authority = payer): Parse
   }
 }
 
-function transferChecked(destination: string, amount: bigint): ParsedInstruction {
+function transferChecked(destination: string, amount: bigint): Ix {
   return {
     program: 'spl-token',
     programId: TOKEN_PROGRAM,
@@ -64,11 +65,12 @@ function transferChecked(destination: string, amount: bigint): ParsedInstruction
   }
 }
 
+// Shaped like the wire answer and parsed through the schema, as the gateway reads it.
 function paymentTx(
   instructions: Ix[],
   options: { err?: { InstructionError: [number, string] }; inner?: Ix[] } = {},
-): ParsedTransactionWithMeta {
-  return {
+): X402Transaction {
+  return x402TransactionSchema.parse({
     slot: 412_000_000,
     blockTime: 1_790_000_000,
     version: 0,
@@ -82,12 +84,12 @@ function paymentTx(
     transaction: {
       signatures: [signature],
       message: {
-        accountKeys: [{ pubkey: new PublicKey(payer), signer: true, writable: true }],
+        accountKeys: [{ pubkey: payer, signer: true, writable: true, source: 'transaction' }],
         recentBlockhash: '11111111111111111111111111111111',
         instructions,
       },
     },
-  }
+  })
 }
 
 const proofBy = (seed: Uint8Array, sig = signature) => ed25519.sign(x402ProofMessage(sig), seed)
@@ -113,11 +115,7 @@ describe('verifyX402Payment', () => {
   })
 
   it('accepts transferChecked and ignores unrelated instructions in the same transaction', () => {
-    const createAta: PartiallyDecodedInstruction = {
-      programId: ATA_PROGRAM,
-      accounts: [],
-      data: '',
-    }
+    const createAta = { programId: ATA_PROGRAM, accounts: [], data: '', stackHeight: 1 }
     const tx = paymentTx([
       createAta,
       transferChecked(publisherAta, 2000n),
@@ -128,7 +126,7 @@ describe('verifyX402Payment', () => {
   })
 
   it('counts transfers made through CPI', () => {
-    const cpi: PartiallyDecodedInstruction = { programId: ATA_PROGRAM, accounts: [], data: '' }
+    const cpi = { programId: ATA_PROGRAM, accounts: [], data: '', stackHeight: 1 }
     const tx = paymentTx([cpi], {
       inner: [transfer(publisherAta, 2000n), transfer(treasuryAta, 200n)],
     })
@@ -207,7 +205,7 @@ describe('verifyX402Payment', () => {
   })
 
   it('does not count a multisig transfer, which carries no single authority', () => {
-    const multisig: ParsedInstruction = {
+    const multisig = {
       program: 'spl-token',
       programId: TOKEN_PROGRAM,
       parsed: {
@@ -276,5 +274,43 @@ describe('verifyX402Payment', () => {
         proof,
       }),
     ).toThrow(/duplicate/)
+  })
+})
+
+describe('x402TransactionSchema', () => {
+  // A mainnet swap of version 1, verbatim from getTransaction(jsonParsed, confirmed):
+  // the version @solana/web3.js 1.x refuses to read, with every transfer made by CPI.
+  const mainnetV1 = JSON.parse(
+    readFileSync(new URL('./fixtures/mainnet-v1-swap.json', import.meta.url), 'utf8'),
+  )
+  const swapSignature =
+    '475HPgbdnXukefhCgHCsBFan8WLUcWPtFqqwZZMopceyYMzhM21xcHuP7W6P9VQQZBFcW8a3bqEjaf1gRVBBE5t8'
+
+  it('reads a real version 1 answer down to its CPI transfers', () => {
+    const tx = x402TransactionSchema.parse(mainnetV1)
+    expect(mainnetV1.version).toBe(1)
+    // Legs and payer match; only the proof is missing, since nobody here holds that key.
+    const verdict = verifyX402Payment(tx, {
+      signature: swapSignature,
+      legs: [{ destination: '3KG1ghykkY4jg8R6q5qmqi98QUTKo314WN3h7VVJeU1V', amount: 51_892_974n }],
+      proof: new Uint8Array(64),
+    })
+    expect(verdict).toEqual({ ok: false, reason: 'proof_invalid' })
+  })
+
+  it('tells two payers apart in the same real transaction', () => {
+    const verdict = verifyX402Payment(x402TransactionSchema.parse(mainnetV1), {
+      signature: swapSignature,
+      legs: [
+        { destination: '3KG1ghykkY4jg8R6q5qmqi98QUTKo314WN3h7VVJeU1V', amount: 51_892_974n },
+        { destination: 'FKmxC83agS6q6QLMsDeGT747wJEgGpsgCnuCJS86mKvD', amount: 51_916_369n },
+      ],
+      proof: new Uint8Array(64),
+    })
+    expect(verdict).toEqual({ ok: false, reason: 'ambiguous_payer' })
+  })
+
+  it('refuses an answer without the transaction it describes', () => {
+    expect(x402TransactionSchema.safeParse({ meta: null }).success).toBe(false)
   })
 })

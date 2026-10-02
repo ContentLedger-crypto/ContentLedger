@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import {
+  associatedTokenAddress,
   type Config,
   type Domain,
   domainPda,
@@ -7,6 +8,8 @@ import {
   type LicenceStatus,
   type Work,
   workPda,
+  type X402Transaction,
+  x402ProofMessage,
 } from '@contentledger/chain'
 import { MIGRATIONS_DIR, receipts, vouchers, works } from '@contentledger/db'
 import {
@@ -19,7 +22,7 @@ import {
 import { utils } from '@coral-xyz/anchor'
 import { PGlite } from '@electric-sql/pglite'
 import { ed25519 } from '@noble/curves/ed25519'
-import { Keypair, type PublicKey } from '@solana/web3.js'
+import { Keypair, PublicKey } from '@solana/web3.js'
 import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
@@ -27,6 +30,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
 import { offerStore } from '../offers.js'
 import type { ContentOrigin } from '../origin.js'
+import type { PaymentReader } from '../payments.js'
 import type { EscrowSnapshot, PaidRegistryReader, PaidRegistrySnapshot } from '../registry.js'
 import type { EscrowReceiptBody } from '../voucher.js'
 import { contentRoutes } from './content.js'
@@ -59,6 +63,8 @@ interface World {
   slot: bigint
   now: number
   originCalls: number
+  ledger: Map<string, X402Transaction>
+  rpcDown: boolean
 }
 
 let world: World
@@ -136,6 +142,8 @@ beforeEach(async () => {
     slot: 100n,
     now: Date.parse('2026-09-30T10:00:00.000Z'),
     originCalls: 0,
+    ledger: new Map(),
+    rpcDown: false,
   }
   agent = Keypair.generate()
   escrow = escrowPda(agent.publicKey)[0]
@@ -153,9 +161,15 @@ beforeEach(async () => {
       return { bytes: world.served, mediaType: 'text/html; charset=utf-8' }
     },
   }
+  const payments: PaymentReader = {
+    transaction: async (signature) => {
+      if (world.rpcDown) throw new Error('getTransaction answered HTTP 429')
+      return world.ledger.get(signature) ?? null
+    },
+  }
   const now = () => new Date(world.now)
   const offers = offerStore({ ttlMs: 60_000, maxBytes: 1 << 20, now })
-  app = createApp(contentRoutes({ registry, db, origin, offers, now }))
+  app = createApp(contentRoutes({ registry, db, origin, offers, payments, now }))
 })
 
 const url = (use = 'train') => `/v1/content?source=${encodeURIComponent(SOURCE)}&use=${use}`
@@ -416,5 +430,209 @@ describe('GET /v1/content with an escrow voucher', () => {
     const again = await pay(offer, header)
     expect(again.status).toBe(402)
     expect(await db.select().from(receipts)).toHaveLength(1)
+  })
+})
+
+const PUBLISHER_ATA = associatedTokenAddress(
+  new PublicKey(OWNER),
+  new PublicKey(config.mint),
+).toBase58()
+
+/** Lands a transfer of each leg on the fake chain and returns the request headers for it. */
+function payX402(
+  legs: Array<[destination: string, amount: bigint]>,
+  options: { payer?: Keypair; prover?: Keypair } = {},
+) {
+  const payer = options.payer ?? agent
+  const signature = utils.bytes.bs58.encode(Keypair.generate().secretKey)
+  world.ledger.set(signature, {
+    meta: { err: null, innerInstructions: [] },
+    transaction: {
+      signatures: [signature],
+      message: {
+        instructions: legs.map(([destination, amount]) => ({
+          programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+          parsed: {
+            type: 'transfer',
+            info: {
+              source: Keypair.generate().publicKey.toBase58(),
+              destination,
+              authority: payer.publicKey.toBase58(),
+              amount: amount.toString(),
+            },
+          },
+        })),
+      },
+    },
+  })
+  const prover = options.prover ?? payer
+  const proof = ed25519.sign(x402ProofMessage(signature), prover.secretKey.slice(0, 32))
+  return {
+    signature,
+    headers: {
+      'X-ContentLedger-Payment': signature,
+      'X-ContentLedger-Payment-Proof': utils.bytes.bs58.encode(proof),
+    },
+  }
+}
+
+const fullPrice = (): Array<[string, bigint]> => [
+  [PUBLISHER_ATA, 2000n],
+  [config.treasuryAta, 200n],
+]
+
+describe('GET /v1/content with an x402 payment', () => {
+  it('serves exactly the hashed bytes and records a receipt anchored to the payment', async () => {
+    const { signature, headers } = payX402(fullPrice())
+    const res = await request(headers)
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toBe('text/html; charset=utf-8')
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(CONTENT)
+    const body = {
+      consumer: agent.publicKey.toBase58(),
+      work: workPda(SOURCE)[0].toBase58(),
+      useType: 'train' as const,
+      tariff: '2000',
+      fee: '200',
+      rateLevel: 'domain' as const,
+      servedHash: sha256(CONTENT),
+      registryHash: sha256(CONTENT),
+      acceptedAt: '2026-09-30T10:00:00.000Z',
+      paymentMethod: 'x402' as const,
+      paymentRef: signature,
+    }
+    expect(receiptOf(res)).toEqual({ id: receiptId(body), ...body, hashMatch: true })
+
+    expect(await db.select().from(receipts)).toMatchObject([
+      { paymentMethod: 'x402', paymentRef: signature, tariff: 2000n, settledAt: null },
+    ])
+    expect(await db.select().from(vouchers)).toHaveLength(0)
+    expect(await db.select().from(works)).toMatchObject([{ byteLen: CONTENT.length }])
+  })
+
+  it('needs no escrow and no consumer header', async () => {
+    world.escrowOpen = false
+    expect((await request(payX402(fullPrice()).headers)).status).toBe(200)
+  })
+
+  it('accepts a consumer header naming the payer and refuses one naming someone else', async () => {
+    const own = payX402(fullPrice()).headers
+    const ownRes = await request({ ...own, 'X-ContentLedger-Consumer': agent.publicKey.toBase58() })
+    expect(ownRes.status).toBe(200)
+
+    const other = payX402(fullPrice()).headers
+    const res = await request({
+      ...other,
+      'X-ContentLedger-Consumer': Keypair.generate().publicKey.toBase58(),
+    })
+    expect(res.status).toBe(400)
+    expect((await errorOf(res)).details.reason).toBe('consumer-mismatch')
+    expect(await db.select().from(receipts)).toHaveLength(1)
+  })
+
+  it('does not serve twice for one payment, even when both requests race', async () => {
+    const { headers } = payX402(fullPrice())
+    const [a, b] = await Promise.all([request(headers), request(headers)])
+
+    expect([a.status, b.status].sort()).toEqual([200, 400])
+    const loser = a.status === 400 ? a : b
+    expect((await errorOf(loser)).details.reason).toBe('replayed')
+    expect(await db.select().from(receipts)).toHaveLength(1)
+  })
+
+  it('does not serve again when a redeemed payment is presented later', async () => {
+    const { headers } = payX402(fullPrice())
+    expect((await request(headers)).status).toBe(200)
+    world.now += 3_600_000
+
+    const again = await request(headers)
+    expect(again.status).toBe(400)
+    expect((await errorOf(again)).details.reason).toBe('replayed')
+    expect(await db.select().from(receipts)).toHaveLength(1)
+  })
+
+  it('answers 400, not 402, for a payment the node cannot see yet, and fetches nothing', async () => {
+    const { headers } = payX402(fullPrice())
+    world.ledger.clear()
+    const res = await request(headers)
+
+    expect(res.status).toBe(400)
+    expect((await errorOf(res)).details.reason).toBe('payment-not-found')
+    expect(world.originCalls).toBe(0)
+    expect(await db.select().from(receipts)).toHaveLength(0)
+  })
+
+  it('lets a payment refused before the fetch be presented again', async () => {
+    const { signature, headers } = payX402(fullPrice())
+    const landed = world.ledger.get(signature)
+    world.ledger.clear()
+    expect((await request(headers)).status).toBe(400)
+
+    if (landed) world.ledger.set(signature, landed)
+    expect((await request(headers)).status).toBe(200)
+  })
+
+  it('refuses a payment at the old price once the owner has changed it', async () => {
+    const { headers } = payX402(fullPrice())
+    world.rateTrain = 3000n
+    const res = await request(headers)
+    expect(res.status).toBe(400)
+    expect((await errorOf(res)).details.reason).toBe('leg-mismatch')
+  })
+
+  it('refuses a payment whose fee went to the publisher', async () => {
+    const res = await request(payX402([[PUBLISHER_ATA, 2200n]]).headers)
+    expect(res.status).toBe(400)
+    expect((await errorOf(res)).details.reason).toBe('leg-mismatch')
+  })
+
+  it('refuses someone else redeeming a payment they watched land', async () => {
+    const res = await request(payX402(fullPrice(), { prover: Keypair.generate() }).headers)
+    expect(res.status).toBe(400)
+    expect((await errorOf(res)).details.reason).toBe('proof-invalid')
+    expect(await db.select().from(receipts)).toHaveLength(0)
+  })
+
+  it('refuses a payment for a work whose licence was withdrawn', async () => {
+    world.domainStatus = 'suspended'
+    expect((await request(payX402(fullPrice()).headers)).status).toBe(403)
+    expect(await db.select().from(receipts)).toHaveLength(0)
+  })
+
+  it('does not take x402 for a free work, which is issued against a voucher', async () => {
+    world.rateTrain = 0n
+    const res = await request(payX402(fullPrice()).headers)
+    expect(res.status).toBe(400)
+    expect((await errorOf(res)).details.reason).toBe('x402-not-offered')
+  })
+
+  it.each([
+    ['a missing proof', { 'X-ContentLedger-Payment': '5'.repeat(88) }],
+    [
+      'a signature of the wrong length',
+      {
+        'X-ContentLedger-Payment': '5'.repeat(40),
+        'X-ContentLedger-Payment-Proof': '5'.repeat(88),
+      },
+    ],
+  ])('rejects %s as malformed', async (_, headers) => {
+    const res = await request(headers)
+    expect(res.status).toBe(400)
+    expect((await errorOf(res)).details.reason).toBe('malformed-payment')
+  })
+
+  it('refuses a request carrying both a voucher and a payment', async () => {
+    const res = await request({ ...payX402(fullPrice()).headers, 'X-ContentLedger-Voucher': 'x' })
+    expect(res.status).toBe(400)
+    expect((await errorOf(res)).details.reason).toBe('two-payment-methods')
+  })
+
+  it('answers 500 when the RPC fails, leaving the payment unredeemed', async () => {
+    const { headers } = payX402(fullPrice())
+    world.rpcDown = true
+    expect((await request(headers)).status).toBe(500)
+    world.rpcDown = false
+    expect((await request(headers)).status).toBe(200)
   })
 })
