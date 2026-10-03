@@ -1,12 +1,25 @@
+import { voucherMessage } from '@contentledger/shared'
 import { BN } from '@coral-xyz/anchor'
 import {
+  Ed25519Program,
   type PublicKey,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
   SystemProgram,
   type TransactionInstruction,
   TransactionInstruction as Web3TransactionInstruction,
 } from '@solana/web3.js'
 import { hostSeed, sourceSeed } from './identifiers.js'
-import { configPda, domainPda, workPda } from './pda.js'
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  associatedTokenAddress,
+  configPda,
+  domainPda,
+  escrowPda,
+  settlementLogPda,
+  TOKEN_PROGRAM_ID,
+  vaultPda,
+  workPda,
+} from './pda.js'
 import { coder, IDL, PROGRAM_ID } from './program.js'
 
 /**
@@ -207,6 +220,63 @@ export function buildSetWorkStatus(args: {
     { status: status(args.status) },
     updateWorkKeys(args.owner, args.host, args.source),
   )
+}
+
+export interface SettleBatchArgs {
+  authority: PublicKey
+  consumer: PublicKey
+  mint: PublicKey
+  treasuryAta: PublicKey
+  /** The last voucher of the batch, as the agent signed it. */
+  voucher: { seq: bigint; cumulative: bigint; chain: Uint8Array; signature: Uint8Array }
+  root: Uint8Array
+  legs: readonly { domain: PublicKey; payoutOwner: PublicKey; tariff: bigint }[]
+}
+
+/**
+ * The verification and the settlement come as a pair because the program reads its
+ * consent out of the first: both are built from the same voucher fields here, so the
+ * 88 bytes the runtime verifies are the 88 bytes `settle.rs` rebuilds.
+ */
+export function buildSettleBatch(
+  args: SettleBatchArgs,
+): [verification: TransactionInstruction, settle: TransactionInstruction] {
+  const [escrow] = escrowPda(args.consumer)
+  const { seq, cumulative, chain, signature } = args.voucher
+  const verification = Ed25519Program.createInstructionWithPublicKey({
+    publicKey: args.consumer.toBytes(),
+    message: voucherMessage({ escrow: escrow.toBytes(), seq, cumulative, chain }),
+    signature,
+  })
+  const settle = build(
+    'settle_batch',
+    {
+      seq: u64(seq),
+      cumulative: u64(cumulative),
+      chain: Array.from(chain),
+      root: Array.from(args.root),
+      tariffs: args.legs.map((leg) => u64(leg.tariff)),
+    },
+    [
+      { pubkey: args.authority, isSigner: true, isWritable: true },
+      { pubkey: configPda()[0] },
+      { pubkey: escrow, isWritable: true },
+      { pubkey: vaultPda(escrow)[0], isWritable: true },
+      { pubkey: args.treasuryAta, isWritable: true },
+      { pubkey: args.mint },
+      { pubkey: settlementLogPda(escrow)[0], isWritable: true },
+      { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY },
+      { pubkey: TOKEN_PROGRAM_ID },
+      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID },
+      { pubkey: SystemProgram.programId },
+      ...args.legs.flatMap((leg) => [
+        { pubkey: leg.domain },
+        { pubkey: leg.payoutOwner },
+        { pubkey: associatedTokenAddress(leg.payoutOwner, args.mint), isWritable: true },
+      ]),
+    ],
+  )
+  return [verification, settle]
 }
 
 /**

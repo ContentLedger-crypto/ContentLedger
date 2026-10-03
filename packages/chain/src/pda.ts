@@ -33,8 +33,8 @@ export const vaultPda = (escrow: PublicKey): Pda => derive([VAULT_SEED, escrow.t
 
 export const settlementLogPda = (escrow: PublicKey): Pda => derive([LOG_SEED, escrow.toBuffer()])
 
-const TOKEN_PROGRAM_ID = new Web3PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-const ASSOCIATED_TOKEN_PROGRAM_ID = new Web3PublicKey(
+export const TOKEN_PROGRAM_ID = new Web3PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+export const ASSOCIATED_TOKEN_PROGRAM_ID = new Web3PublicKey(
   'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
 )
 

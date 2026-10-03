@@ -1,3 +1,5 @@
+import { voucherMessage } from '@contentledger/shared'
+import { ed25519 } from '@noble/curves/ed25519'
 import { Keypair, PublicKey } from '@solana/web3.js'
 import { describe, expect, it } from 'vitest'
 import { hostSeed } from './identifiers.js'
@@ -7,11 +9,20 @@ import {
   buildRegisterWork,
   buildSetDomainRates,
   buildSetDomainStatus,
+  buildSettleBatch,
   buildSetWorkRates,
   buildSetWorkStatus,
   decodeInstruction,
 } from './instructions.js'
-import { configPda, domainPda, workPda } from './pda.js'
+import {
+  associatedTokenAddress,
+  configPda,
+  domainPda,
+  escrowPda,
+  settlementLogPda,
+  vaultPda,
+  workPda,
+} from './pda.js'
 import { PROGRAM_ID } from './program.js'
 
 const authority = Keypair.generate().publicKey
@@ -206,5 +217,91 @@ describe('склад акаунтів', () => {
     const signers = instruction.keys.filter((key) => key.isSigner)
     expect(signers).toHaveLength(1)
     expect(signers[0]?.pubkey.toBase58()).toBe(authority.toBase58())
+  })
+})
+
+describe('settle_batch', () => {
+  const agent = Keypair.generate()
+  const [escrow] = escrowPda(agent.publicKey)
+  const chain = new Uint8Array(32).fill(0xc4)
+  const root = new Uint8Array(32).fill(0x7a)
+  const voucher = { seq: 12n, cumulative: 26_400n, chain }
+  const message = voucherMessage({ escrow: escrow.toBytes(), ...voucher })
+  const signature = ed25519.sign(message, agent.secretKey.slice(0, 32))
+  const payoutOwner = Keypair.generate().publicKey
+  const legs = [
+    { domain: domainPda('acme-news.test')[0], payoutOwner, tariff: 20_000n },
+    { domain: domainPda('devblog.test')[0], payoutOwner, tariff: 4_000n },
+  ]
+  const [verification, settle] = buildSettleBatch({
+    authority,
+    consumer: agent.publicKey,
+    mint,
+    treasuryAta,
+    voucher: { ...voucher, signature },
+    root,
+    legs,
+  })
+
+  it('settle_batch survives a round-trip', () => {
+    expect(decodeInstruction(settle).data).toEqual({
+      seq: 12n,
+      cumulative: 26_400n,
+      chain: Array.from(chain),
+      root: Array.from(root),
+      tariffs: [20_000n, 4_000n],
+    })
+  })
+
+  // settle.rs accepts exactly one header; any other layout is VoucherSignatureMismatch.
+  it('the verification carries the header settle.rs pins, the agent key and the voucher', () => {
+    const data = new Uint8Array(verification.data)
+    expect(verification.programId.toBase58()).toBe('Ed25519SigVerify111111111111111111111111111')
+    expect(Array.from(data.subarray(0, 16))).toEqual([
+      1, 0, 48, 0, 0xff, 0xff, 16, 0, 0xff, 0xff, 112, 0, 88, 0, 0xff, 0xff,
+    ])
+    expect(data.subarray(16, 48)).toEqual(agent.publicKey.toBytes())
+    expect(data.subarray(112)).toEqual(message)
+    expect(ed25519.verify(data.subarray(48, 112), data.subarray(112), data.subarray(16, 48))).toBe(
+      true,
+    )
+  })
+
+  it('carries the fixed accounts in IDL order, then three per leg', () => {
+    const keys = settle.keys.map(({ pubkey, isSigner, isWritable }) => [
+      pubkey.toBase58(),
+      isSigner,
+      isWritable,
+    ])
+    expect(keys.slice(0, 7)).toEqual([
+      [authority.toBase58(), true, true],
+      [configPda()[0].toBase58(), false, false],
+      [escrow.toBase58(), false, true],
+      [vaultPda(escrow)[0].toBase58(), false, true],
+      [treasuryAta.toBase58(), false, true],
+      [mint.toBase58(), false, false],
+      [settlementLogPda(escrow)[0].toBase58(), false, true],
+    ])
+    expect(keys.slice(11)).toEqual(
+      legs.flatMap(({ domain }) => [
+        [domain.toBase58(), false, false],
+        [payoutOwner.toBase58(), false, false],
+        [associatedTokenAddress(payoutOwner, mint).toBase58(), false, true],
+      ]),
+    )
+  })
+
+  it('refuses a voucher signature that is not 64 bytes', () => {
+    expect(() =>
+      buildSettleBatch({
+        authority,
+        consumer: agent.publicKey,
+        mint,
+        treasuryAta,
+        voucher: { ...voucher, signature: signature.subarray(0, 63) },
+        root,
+        legs,
+      }),
+    ).toThrow()
   })
 })
