@@ -361,6 +361,34 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@1.21.7)(tsx@4.23.13))
 
+  tools/verify-receipt:
+    dependencies:
+      '@contentledger/chain':
+        specifier: workspace:*
+        version: link:../../packages/chain
+      '@contentledger/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@coral-xyz/anchor':
+        specifier: 'catalog:'
+        version: 0.32.1(bufferutil@4.1.0)(typescript@5.9.3)
+      '@solana/web3.js':
+        specifier: 'catalog:'
+        version: 1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      tsx:
+        specifier: 4.23.13
+        version: 4.23.13
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@1.21.7)(tsx@4.23.13))
+
 packages:
 
   '@alloc/quick-lru@5.3.0':

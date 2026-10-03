@@ -1,0 +1,23 @@
+{
+  "name": "@contentledger/verify-receipt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "node --env-file-if-exists=../../.env --import tsx src/cli.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@contentledger/chain": "workspace:*",
+    "@contentledger/shared": "workspace:*",
+    "@coral-xyz/anchor": "catalog:",
+    "@solana/web3.js": "catalog:",
+    "tsx": "4.23.13",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

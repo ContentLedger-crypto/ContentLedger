@@ -130,6 +130,32 @@ export function decodeEscrow(data: Uint8Array): Escrow {
   }
 }
 
+export interface SettlementEntry {
+  seqEnd: bigint
+  ts: bigint
+  root: string
+  chain: string
+}
+
+export interface SettlementLog {
+  escrow: string
+  /** Occupied slots only, in ring order: `seq` starts at 1, so `seq_end = 0` is a free slot. */
+  entries: SettlementEntry[]
+}
+
+export function decodeSettlementLog(data: Uint8Array): SettlementLog {
+  const account = raw('SettlementLog', data)
+  const entries: SettlementEntry[] = account.entries
+    .map((entry: { seq_end: BN; ts: BN; root: number[]; chain: number[] }) => ({
+      seqEnd: big(entry.seq_end),
+      ts: big(entry.ts),
+      root: hex(entry.root),
+      chain: hex(entry.chain),
+    }))
+    .filter((entry: SettlementEntry) => entry.seqEnd !== 0n)
+  return { escrow: key(account.escrow), entries }
+}
+
 const TOKEN_ACCOUNT_BYTES = 165
 const TOKEN_AMOUNT_OFFSET = 64
 
