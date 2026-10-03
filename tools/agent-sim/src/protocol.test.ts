@@ -55,8 +55,34 @@ const offer = (overrides: Partial<EscrowOffer> = {}): EscrowOffer => ({
 
 const quote = { work: WORK, useType: 'train' as const, tariff: 2000n, fee: 200n, total: 2200n }
 
+const MINT = 'F2snBajNcBXZ6GheR5LPhMvc9Ai2vG9uGweXrciNM1oF'
+const PUBLISHER_ATA = 'EhVTAeisM7wGmDn4KwmVRSE9bXYfEGif39VyYrUypKVA'
+const PUBLISHER = '7ddMq1eic5MmuNAvoUzBnFo7epc383GAMyoY1atS7PQZ'
+const TREASURY_ATA = 'HM8EYSNJMxvfrpi1FM31BPpCbgd3p2zbEd9K9re4WgwZ'
+
+const x402Method = {
+  kind: 'x402',
+  mint: MINT,
+  legs: [
+    { payTo: PUBLISHER_ATA, amount: '2000', owner: PUBLISHER },
+    { payTo: TREASURY_ATA, amount: '200' },
+  ],
+}
+
+const x402 = {
+  mint: MINT,
+  legs: [
+    { payTo: PUBLISHER_ATA, amount: 2000n, owner: PUBLISHER },
+    { payTo: TREASURY_ATA, amount: 200n },
+  ],
+}
+
 /** Exactly what the gateway sends: `paymentRequired` in apps/gateway/src/routes/quote.ts. */
-const paymentRequired = (escrowMethod: Record<string, unknown>, reason?: string) => ({
+const paymentRequired = (
+  escrowMethod: Record<string, unknown>,
+  reason?: string,
+  methods: Record<string, unknown>[] = [x402Method],
+) => ({
   error: {
     code: 'PAYMENT_REQUIRED',
     message: 'this work is licensed per request; pay to receive it',
@@ -70,10 +96,7 @@ const paymentRequired = (escrowMethod: Record<string, unknown>, reason?: string)
       currency: 'USDC',
       decimals: 6,
       rateLevel: 'domain',
-      methods: [
-        { kind: 'escrow', program: 'P', amount: '2200', ...escrowMethod },
-        { kind: 'x402', legs: [{ payTo: 'A', amount: '2000' }] },
-      ],
+      methods: [{ kind: 'escrow', program: 'P', amount: '2200', ...escrowMethod }, ...methods],
     },
   },
 })
@@ -90,13 +113,14 @@ describe('parsePaymentRequired', () => {
         },
       }),
     )
-    expect(parsed).toEqual({ quote, escrow: { offer: offer() }, reason: undefined })
+    expect(parsed).toEqual({ quote, escrow: { offer: offer() }, x402, reason: undefined })
   })
 
   it('reads why the escrow path is closed', () => {
     expect(parsePaymentRequired(paymentRequired({ unavailable: 'insufficient-funds' }))).toEqual({
       quote,
       escrow: { unavailable: 'insufficient-funds' },
+      x402,
       reason: undefined,
     })
   })
@@ -110,6 +134,23 @@ describe('parsePaymentRequired', () => {
 
   it('is null for anything else', () => {
     expect(parsePaymentRequired({ error: { code: 'NOT_FOUND', details: {} } })).toBeNull()
+    expect(parsePaymentRequired('<html>')).toBeNull()
+  })
+
+  it('reads a 402 without x402, as for a free work, as offering none', () => {
+    const parsed = parsePaymentRequired(
+      paymentRequired({ unavailable: 'insufficient-funds' }, undefined, []),
+    )
+    expect(parsed?.x402).toBeNull()
+  })
+
+  // The escrow offer stays usable: an x402 method the agent cannot read is one it cannot use.
+  it('reads an x402 method it cannot make sense of as none, keeping the escrow offer', () => {
+    const unreadable = { kind: 'x402', legs: [{ payTo: 'A', amount: '2000' }] }
+    const parsed = parsePaymentRequired(
+      paymentRequired({ unavailable: 'insufficient-funds' }, undefined, [unreadable]),
+    )
+    expect(parsed).toMatchObject({ escrow: { unavailable: 'insufficient-funds' }, x402: null })
     expect(parsePaymentRequired('<html>')).toBeNull()
   })
 })

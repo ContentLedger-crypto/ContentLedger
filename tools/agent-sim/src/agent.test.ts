@@ -6,22 +6,26 @@ import {
   escrowPda,
   type Work,
   workPda,
+  type X402Transaction,
 } from '@contentledger/chain'
-import { MIGRATIONS_DIR, vouchers } from '@contentledger/db'
+import { MIGRATIONS_DIR, receipts, vouchers } from '@contentledger/db'
 import { createApp } from '@contentledger/gateway/src/app.js'
 import { offerStore } from '@contentledger/gateway/src/offers.js'
 import type { PaidRegistrySnapshot } from '@contentledger/gateway/src/registry.js'
 import { contentRoutes } from '@contentledger/gateway/src/routes/content.js'
 import { publicRoutes } from '@contentledger/gateway/src/routes/public.js'
 import { chainGenesis } from '@contentledger/shared'
+import { utils } from '@coral-xyz/anchor'
 import { PGlite } from '@electric-sql/pglite'
-import { Keypair } from '@solana/web3.js'
+import { decodeTransferCheckedInstruction, TOKEN_PROGRAM_ID } from '@solana/spl-token'
+import { Keypair, type TransactionInstruction } from '@solana/web3.js'
 import { asc, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { type Agent, createAgent } from './agent.js'
 import type { Journal, JournalState } from './journal.js'
+import type { Landing, PaymentRail } from './x402.js'
 
 const SOURCE = 'https://acme-news.test/2026/ai-act-explained.html'
 const UNKNOWN = 'https://acme-news.test/2026/never-registered.html'
@@ -60,6 +64,63 @@ let keypair: Keypair
 let gateway: (request: Request) => Promise<Response>
 let journal: Journal & { state: JournalState | null }
 let events: { event: string; fields: Record<string, unknown> }[]
+let rail: FakeRail
+let landed: Map<string, X402Transaction>
+let hiddenReads: number
+
+interface FakeRail extends PaymentRail {
+  prepared: number
+  landing: Landing | 'crash'
+  underpay: boolean
+}
+
+/**
+ * Lands a payment as the node would report it: the token instructions the agent built,
+ * parsed. The gateway then checks it with its real x402 verification.
+ */
+function fakeRail(): FakeRail {
+  const built = new Map<string, readonly TransactionInstruction[]>()
+  const parsed = (ix: TransactionInstruction) => {
+    if (!ix.programId.equals(TOKEN_PROGRAM_ID)) return { programId: ix.programId.toBase58() }
+    const { keys, data } = decodeTransferCheckedInstruction(ix)
+    const amount = fake.underpay ? data.amount - 1n : data.amount
+    return {
+      programId: TOKEN_PROGRAM_ID.toBase58(),
+      parsed: {
+        type: 'transferChecked',
+        info: {
+          destination: keys.destination.pubkey.toBase58(),
+          authority: keys.owner.pubkey.toBase58(),
+          tokenAmount: { amount: amount.toString() },
+        },
+      },
+    }
+  }
+  const fake: FakeRail = {
+    prepared: 0,
+    landing: 'landed',
+    underpay: false,
+    async prepare(instructions) {
+      fake.prepared += 1
+      const signature = utils.bytes.bs58.encode(Keypair.generate().secretKey)
+      built.set(signature, instructions)
+      return { signature, transaction: '', blockhash: '1'.repeat(32), lastValidBlockHeight: 1 }
+    },
+    async land({ signature }) {
+      if (fake.landing === 'crash') throw new Error('process died mid-payment')
+      if (fake.landing !== 'landed') return fake.landing
+      landed.set(signature, {
+        meta: { err: null, innerInstructions: [] },
+        transaction: {
+          signatures: [signature],
+          message: { instructions: (built.get(signature) ?? []).map(parsed) },
+        },
+      })
+      return 'landed'
+    },
+  }
+  return fake
+}
 
 function snapshot(source: string): PaidRegistrySnapshot {
   const domain: Domain = {
@@ -115,7 +176,15 @@ beforeEach(async () => {
       db,
       origin: { fetch: async () => ({ bytes: Uint8Array.from(CONTENT), mediaType: 'text/html' }) },
       offers: offerStore({ ttlMs: 60_000, maxBytes: 1 << 20, now }),
-      payments: { transaction: async () => null },
+      payments: {
+        async transaction(signature) {
+          if (hiddenReads > 0) {
+            hiddenReads -= 1
+            return null
+          }
+          return landed.get(signature) ?? null
+        },
+      },
       now,
     }),
     publicRoutes(db),
@@ -131,12 +200,21 @@ beforeEach(async () => {
     },
   }
   events = []
+  rail = fakeRail()
+  landed = new Map()
+  hiddenReads = 0
 })
 
 type Hook = (request: Request, forward: () => Promise<Response>) => Promise<Response>
 
-function agentWith(hook: Hook = (_, forward) => forward(), agentKeypair = keypair): Agent {
+function agentWith(
+  hook: Hook = (_, forward) => forward(),
+  agentKeypair = keypair,
+  withRail = true,
+): Agent {
   return createAgent({
+    ...(withRail && { rail }),
+    sleep: async () => {},
     keypair: agentKeypair,
     gatewayUrl: GATEWAY,
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
@@ -180,9 +258,9 @@ describe('agent against the gateway', () => {
     expect(await kept()).toEqual([])
   })
 
-  it('is refused when its escrow cannot cover the price', async () => {
+  it('is refused when its escrow cannot cover the price and it has no way to pay x402', async () => {
     world.vaultBalance = 100n
-    const outcome = await agentWith().request(SOURCE, 'train')
+    const outcome = await agentWith(undefined, keypair, false).request(SOURCE, 'train')
     expect(outcome).toEqual({
       kind: 'refused',
       status: 402,
@@ -292,5 +370,161 @@ describe('agent against the gateway', () => {
     await expect(agentWith(undefined, Keypair.generate()).request(SOURCE, 'train')).rejects.toThrow(
       /journal belongs/,
     )
+  })
+})
+
+const isPayment = (request: Request) => request.headers.has('X-ContentLedger-Payment')
+
+const x402Receipts = async () =>
+  (await db.select().from(receipts)).filter((row) => row.paymentMethod === 'x402')
+
+describe('agent paying by x402', () => {
+  it('pays the legs of the 402 and gets the bytes with a receipt naming its payment', async () => {
+    const outcome = await agentWith().request(SOURCE, 'train', { pay: 'x402' })
+
+    expect(outcome).toMatchObject({
+      kind: 'delivered',
+      receipt: { paymentMethod: 'x402', tariff: '2000', fee: '200', hashMatch: true },
+    })
+    const [signature] = landed.keys()
+    expect(outcome).toMatchObject({ receipt: { paymentRef: signature } })
+    expect((await x402Receipts()).map((row) => row.paymentRef)).toEqual([signature])
+    expect(journal.state?.payments).toEqual([])
+    // An x402 payment is no voucher: the escrow chain does not move.
+    expect(journal.state?.position.seq).toBe(0n)
+  })
+
+  it('falls back to x402 when its escrow cannot cover the price', async () => {
+    world.vaultBalance = 100n
+
+    const outcome = await agentWith().request(SOURCE, 'train')
+
+    expect(outcome).toMatchObject({ kind: 'delivered', receipt: { paymentMethod: 'x402' } })
+    expect(events).toContainEqual({
+      event: 'fallback-x402',
+      fields: { source: SOURCE, reason: 'insufficient-funds' },
+    })
+  })
+
+  it('presents the payment again while the gateway does not see it yet, paying once', async () => {
+    hiddenReads = 2
+
+    const outcome = await agentWith().request(SOURCE, 'train', { pay: 'x402' })
+
+    expect(outcome).toMatchObject({ kind: 'delivered', receipt: { paymentMethod: 'x402' } })
+    expect(rail.prepared).toBe(1)
+  })
+
+  it('records the payment before it leaves, and redeems it after a restart', async () => {
+    rail.landing = 'crash'
+    await expect(agentWith().request(SOURCE, 'train', { pay: 'x402' })).rejects.toThrow(
+      /process died/,
+    )
+    expect(journal.state?.payments).toHaveLength(1)
+
+    rail.landing = 'landed'
+    const outcome = await agentWith().request(SOURCE, 'train', { pay: 'x402' })
+
+    expect(outcome).toMatchObject({ kind: 'delivered', receipt: { paymentMethod: 'x402' } })
+    expect(events.map((e) => e.event)).toContain('payment-recovered')
+    expect(await x402Receipts()).toHaveLength(2)
+    expect(journal.state?.payments).toEqual([])
+  })
+
+  it('learns from the replay answer that a payment whose response was lost was redeemed', async () => {
+    let dropped = false
+    const agent = agentWith(async (request, forward) => {
+      const res = await forward()
+      if (isPayment(request) && !dropped) {
+        dropped = true
+        throw new TypeError('fetch failed')
+      }
+      return res
+    })
+
+    const outcome = await agent.request(SOURCE, 'train', { pay: 'x402' })
+
+    expect(outcome).toMatchObject({ kind: 'refused', status: 400, reason: 'replayed' })
+    expect(events.map((e) => e.event)).toEqual(['payment-unanswered', 'paid-undelivered'])
+    expect(await x402Receipts()).toHaveLength(1)
+    expect(journal.state?.payments).toEqual([])
+  })
+
+  it('forgets a payment that can no longer land', async () => {
+    rail.landing = 'expired'
+
+    const outcome = await agentWith().request(SOURCE, 'train', { pay: 'x402' })
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      status: 402,
+      code: 'PAYMENT_REQUIRED',
+      reason: 'payment-expired',
+    })
+    expect(journal.state?.payments).toEqual([])
+    expect(await x402Receipts()).toEqual([])
+  })
+
+  it('drops a payment the gateway rejects, and says why', async () => {
+    rail.underpay = true
+
+    const outcome = await agentWith().request(SOURCE, 'train', { pay: 'x402' })
+
+    expect(outcome).toMatchObject({ kind: 'refused', status: 400, reason: 'leg-mismatch' })
+    expect(events).toContainEqual({
+      event: 'payment-rejected',
+      fields: expect.objectContaining({ reason: 'leg-mismatch' }),
+    })
+    expect(journal.state?.payments).toEqual([])
+  })
+
+  it('pays nothing when the 402 sends a leg to an account that is not the owner’s', async () => {
+    const agent = agentWith(async (_request, forward) => {
+      const res = await forward()
+      if (res.status !== 402) return res
+      const json = (await res.json()) as {
+        error: { details: { methods: { kind: string; legs?: { payTo: string }[] }[] } }
+      }
+      const leg = json.error.details.methods.find((m) => m.kind === 'x402')?.legs?.[0]
+      if (leg) leg.payTo = Keypair.generate().publicKey.toBase58()
+      return Response.json(json, { status: 402 })
+    })
+
+    await expect(agent.request(SOURCE, 'train', { pay: 'x402' })).rejects.toThrow(
+      /leg-account-mismatch/,
+    )
+    expect(rail.prepared).toBe(0)
+  })
+
+  it('pays nothing when the 402 quotes another use than the one asked for', async () => {
+    const agent = agentWith(async (_request, forward) => {
+      const res = await forward()
+      if (res.status !== 402) return res
+      const json = (await res.json()) as { error: { details: { useType: string } } }
+      json.error.details.useType = 'inference'
+      return Response.json(json, { status: 402 })
+    })
+
+    await expect(agent.request(SOURCE, 'train', { pay: 'x402' })).rejects.toThrow(/terms-mismatch/)
+    expect(rail.prepared).toBe(0)
+  })
+
+  it('disputes bytes that are not the ones its x402 receipt names', async () => {
+    const agent = agentWith(async (request, forward) => {
+      const res = await forward()
+      if (!isPayment(request) || res.status !== 200) return res
+      return new Response('tampered', { status: 200, headers: res.headers })
+    })
+
+    const outcome = await agent.request(SOURCE, 'train', { pay: 'x402' })
+
+    expect(outcome).toMatchObject({ kind: 'disputed', reason: 'served-hash-mismatch' })
+    expect(journal.state?.payments).toEqual([])
+  })
+
+  it('refuses to pay x402 without a rail to pay with', async () => {
+    await expect(
+      agentWith(undefined, keypair, false).request(SOURCE, 'train', { pay: 'x402' }),
+    ).rejects.toThrow(/no payment rail/)
   })
 })

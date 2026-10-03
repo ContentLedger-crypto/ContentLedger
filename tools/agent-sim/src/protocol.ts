@@ -56,6 +56,18 @@ const escrowMethodSchema = z.union([
   z.object({ kind: z.literal('escrow'), unavailable: z.string() }),
 ])
 
+const base58Key = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)
+
+const x402MethodSchema = z.object({
+  kind: z.literal('x402'),
+  mint: base58Key,
+  legs: z
+    .array(z.object({ payTo: base58Key, amount: usdcAmountSchema, owner: base58Key.optional() }))
+    .min(1),
+})
+
+export type X402Method = Omit<z.infer<typeof x402MethodSchema>, 'kind'>
+
 export interface Quote {
   work: string
   useType: UseType
@@ -67,6 +79,8 @@ export interface Quote {
 export interface PaymentRequired {
   quote: Quote
   escrow: { offer: EscrowOffer } | { unavailable: string }
+  /** `null` when the gateway does not offer x402 for this work, as for a free one. */
+  x402: X402Method | null
   reason: 'offer-expired' | undefined
 }
 
@@ -78,7 +92,12 @@ export function parsePaymentRequired(json: unknown): PaymentRequired | null {
   if (!method.success) return null
   const escrow =
     'offer' in method.data ? { offer: method.data.offer } : { unavailable: method.data.unavailable }
-  return { quote: { work, useType, tariff, fee, total }, escrow, reason }
+  const offered = methods.find((m) => m.kind === 'x402')
+  const parsedX402 = x402MethodSchema.safeParse(offered)
+  const x402 = parsedX402.success
+    ? { mint: parsedX402.data.mint, legs: parsedX402.data.legs }
+    : null
+  return { quote: { work, useType, tariff, fee, total }, escrow, x402, reason }
 }
 
 export type OfferProblem =
@@ -140,7 +159,7 @@ export function signVoucher(agent: Keypair, position: Position, offer: EscrowOff
   return { header, next: { seq, cumulative, chain }, receiptId: receiptId(offer.body) }
 }
 
-export type Receipt = EscrowBody & { id: string; hashMatch: boolean }
+export type Receipt = ReceiptBody & { id: string; hashMatch: boolean }
 
 export type Delivery =
   | { ok: true; receipt: Receipt }
@@ -165,7 +184,7 @@ export function checkDelivery(
   return { ok: true, receipt: { id, hashMatch, ...body } }
 }
 
-function parseReceipt(header: string | undefined): Receipt | null {
+export function parseReceipt(header: string | undefined): Receipt | null {
   if (header === undefined) return null
   let json: unknown
   try {
@@ -175,7 +194,7 @@ function parseReceipt(header: string | undefined): Receipt | null {
   }
   if (typeof json !== 'object' || json === null) return null
   const { id, hashMatch, ...rest } = json as Record<string, unknown>
-  const body = escrowBodySchema.safeParse(rest)
+  const body = receiptBodySchema.safeParse(rest)
   if (!body.success || typeof id !== 'string' || typeof hashMatch !== 'boolean') return null
   return { ...body.data, id, hashMatch }
 }

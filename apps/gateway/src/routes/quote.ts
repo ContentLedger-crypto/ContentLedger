@@ -31,6 +31,7 @@ export interface Quote {
   recipient: string
   publisherAta: string
   treasuryAta: string
+  mint: string
   verified: boolean
 }
 
@@ -82,6 +83,7 @@ export function quoteFor(
         new PublicKey(config.mint),
       ).toBase58(),
       treasuryAta: config.treasuryAta,
+      mint: config.mint,
       verified: work.account.attestedBy > 0,
     },
   }
@@ -132,7 +134,14 @@ function paymentMethods(quote: Quote, terms: EscrowTerms) {
     escrow,
     {
       kind: 'x402',
-      legs: legs.map((leg) => ({ payTo: leg.destination, amount: leg.amount.toString() })),
+      mint: quote.mint,
+      // Only the publisher's account may not exist yet; the treasury's is fixed in Config,
+      // where the program checked it is a token account of this mint.
+      legs: legs.map((leg) => ({
+        payTo: leg.destination,
+        amount: leg.amount.toString(),
+        ...(leg.destination === quote.publisherAta && { owner: quote.recipient }),
+      })),
     },
   ]
 }

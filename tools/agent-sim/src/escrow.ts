@@ -25,8 +25,11 @@ export async function settledPosition(
 ): Promise<Position> {
   const [escrow] = escrowPda(consumer)
   const info = await connection.getAccountInfo(escrow, 'confirmed')
-  // Lamports sent to the address leave a system-owned account, which is still no escrow.
-  if (!info?.owner.equals(PROGRAM_ID)) throw new Error(`agent ${consumer.toBase58()} has no escrow`)
+  // Lamports sent to the address leave a system-owned account, which is still no escrow;
+  // nothing is settled, and an escrow opened later starts from the same genesis.
+  if (!info?.owner.equals(PROGRAM_ID)) {
+    return { seq: 0n, cumulative: 0n, chain: chainGenesis(escrow.toBytes()) }
+  }
   const { lastSeq, settledTotal, lastChain } = decodeEscrow(info.data)
   return {
     seq: lastSeq,

@@ -58,11 +58,14 @@ describe('settledPosition', () => {
     })
   })
 
-  it('refuses an agent without an escrow', async () => {
-    await expect(settledPosition(reading(null), agent)).rejects.toThrow(/no escrow/)
-    await expect(
-      settledPosition(reading(await escrowAccount(0, PublicKey.default)), agent),
-    ).rejects.toThrow(/no escrow/)
+  // Nothing is settled yet, and the escrow it may open later starts from this genesis:
+  // until then the agent can still pay by x402.
+  it('starts an agent without an escrow at the genesis its escrow would open with', async () => {
+    const genesis = { seq: 0n, cumulative: 0n, chain: chainGenesis(escrow.toBytes()) }
+    expect(await settledPosition(reading(null), agent)).toEqual(genesis)
+    expect(
+      await settledPosition(reading(await escrowAccount(0, PublicKey.default)), agent),
+    ).toEqual(genesis)
   })
 })
 

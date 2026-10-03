@@ -164,14 +164,33 @@ describe('paymentRequired', () => {
             },
             {
               kind: 'x402',
+              mint: MINT,
               legs: [
-                { payTo: ataOf(OWNER), amount: '2000' },
+                { payTo: ataOf(OWNER), amount: '2000', owner: OWNER },
                 { payTo: TREASURY_ATA, amount: '200' },
               ],
             },
           ],
         },
       },
+    })
+  })
+
+  // The payer may be the first to pay this publisher, and an ATA cannot be created from
+  // its address alone: the 402 names whose account it is, and that is the payout wallet.
+  it('names the payout wallet behind the publisher leg, not the domain owner', () => {
+    const quote = quoted(
+      quoteFor(snapshot({ domain: domain({ payoutOwner: SEPARATE_PAYOUT }) }), 'train'),
+    )
+    const [, x402] = paymentRequired(quote, { unavailable: 'consumer-required' }).error.details
+      .methods
+    expect(x402).toEqual({
+      kind: 'x402',
+      mint: MINT,
+      legs: [
+        { payTo: ataOf(SEPARATE_PAYOUT), amount: '2000', owner: SEPARATE_PAYOUT },
+        { payTo: TREASURY_ATA, amount: '200' },
+      ],
     })
   })
 

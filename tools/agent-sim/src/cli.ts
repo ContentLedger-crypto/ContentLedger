@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { createAgent } from './agent.js'
 import { deposit, settledPosition } from './escrow.js'
 import { fileJournal } from './journal.js'
+import { rpcPaymentRail } from './x402.js'
 
 const [command] = process.argv.slice(2)
 const { values } = parseArgs({
@@ -16,6 +17,7 @@ const { values } = parseArgs({
     source: { type: 'string' },
     use: { type: 'string', default: 'train' },
     count: { type: 'string', default: '1' },
+    pay: { type: 'string', default: 'escrow' },
   },
 })
 
@@ -58,8 +60,10 @@ async function main(): Promise<void> {
     const source = z.url().parse(values.source)
     const use = useTypeSchema.parse(values.use)
     const count = z.coerce.number().int().positive().parse(values.count)
+    const pay = z.enum(['escrow', 'x402']).parse(values.pay)
     const agent = createAgent({
       keypair,
+      rail: rpcPaymentRail(connection, keypair),
       gatewayUrl: env.GATEWAY_URL,
       fetch,
       journal: fileJournal(journalPath),
@@ -68,20 +72,24 @@ async function main(): Promise<void> {
     })
     for (let i = 0; i < count; i += 1) {
       const started = performance.now()
-      const outcome = await agent.request(source, use)
+      const outcome = await agent.request(source, use, { pay })
       const ms = Math.round(performance.now() - started)
       if (outcome.kind === 'delivered') {
-        const { id, seq, tariff, fee, hashMatch } = outcome.receipt
+        const { receipt } = outcome
+        const paidBy =
+          receipt.paymentMethod === 'escrow'
+            ? { seq: receipt.seq }
+            : { paymentRef: receipt.paymentRef }
         console.log(
           JSON.stringify({
             outcome: 'delivered',
             ms,
             bytes: outcome.bytes.length,
-            id,
-            seq,
-            tariff,
-            fee,
-            hashMatch,
+            id: receipt.id,
+            ...paidBy,
+            tariff: receipt.tariff,
+            fee: receipt.fee,
+            hashMatch: receipt.hashMatch,
           }),
         )
       } else {
@@ -92,7 +100,7 @@ async function main(): Promise<void> {
   }
 
   throw new Error(
-    'usage: agent <keygen | deposit --amount <base units> | fetch --source <url> [--use train|inference] [--count n]>',
+    'usage: agent <keygen | deposit --amount <base units> | fetch --source <url> [--use train|inference] [--count n] [--pay escrow|x402]>',
   )
 }
 

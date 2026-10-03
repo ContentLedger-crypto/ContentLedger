@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -13,6 +13,19 @@ const state: JournalState = {
     {
       receiptId: 'ab'.repeat(32),
       next: { seq: 4n, cumulative: 8800n, chain: new Uint8Array(32).fill(8) },
+    },
+  ],
+  payments: [
+    {
+      signature: '5'.repeat(88),
+      transaction: 'AQID',
+      blockhash: '1'.repeat(32),
+      lastValidBlockHeight: 4_200,
+      source: 'https://acme-news.test/a.html',
+      use: 'inference',
+      work: 'Work1111111111111111111111111111111111111111',
+      tariff: '500',
+      fee: '50',
     },
   ],
 }
@@ -35,6 +48,15 @@ describe('fileJournal', () => {
     await journal.write({ ...state, doubtful: [] })
     expect(readdirSync(at)).toEqual(['journal.json'])
     expect((await journal.read())?.doubtful).toEqual([])
+  })
+
+  it('reads a journal written before x402 as one with no pending payments', async () => {
+    const path = join(dir(), 'journal.json')
+    const journal = fileJournal(path)
+    await journal.write(state)
+    const { payments: _payments, ...older } = JSON.parse(readFileSync(path, 'utf8'))
+    writeFileSync(path, JSON.stringify(older))
+    expect(await journal.read()).toEqual({ ...state, payments: [] })
   })
 
   // Starting over from the chain would sign seqs the gateway already holds.
