@@ -1,23 +1,30 @@
 {
-  "name": "@contentledger/deploy",
+  "name": "@contentledger/agent-sim",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
-    "bootstrap": "node --env-file-if-exists=../../.env --import tsx src/cli.ts",
-    "fund": "node --env-file-if-exists=../../.env --import tsx src/fund-cli.ts",
+    "agent": "node --env-file-if-exists=../../.env --import tsx src/cli.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
     "@contentledger/chain": "workspace:*",
     "@contentledger/shared": "workspace:*",
+    "@coral-xyz/anchor": "catalog:",
+    "@noble/curves": "1.9.7",
     "@solana/spl-token": "catalog:",
     "@solana/web3.js": "catalog:",
+    "tsx": "4.23.13",
     "zod": "4.5.4"
   },
   "devDependencies": {
-    "tsx": "4.23.13",
+    "@contentledger/db": "workspace:*",
+    "@contentledger/gateway": "workspace:*",
+    "@electric-sql/pglite": "0.5.8",
+    "drizzle-orm": "0.45.2",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   }

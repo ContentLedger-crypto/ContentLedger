@@ -4,7 +4,9 @@ import { Keypair, PublicKey } from '@solana/web3.js'
 import { describe, expect, it } from 'vitest'
 import { hostSeed } from './identifiers.js'
 import {
+  buildDeposit,
   buildInitConfig,
+  buildOpenEscrow,
   buildRegisterDomain,
   buildRegisterWork,
   buildSetDomainRates,
@@ -303,5 +305,42 @@ describe('settle_batch', () => {
         legs,
       }),
     ).toThrow()
+  })
+})
+
+describe('escrow', () => {
+  const agent = Keypair.generate().publicKey
+  const [escrow] = escrowPda(agent)
+  const meta = (instruction: {
+    keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[]
+  }) =>
+    instruction.keys.map(({ pubkey, isSigner, isWritable }) => [
+      pubkey.toBase58(),
+      isSigner,
+      isWritable,
+    ])
+
+  it('open_escrow is paid for by the agent and creates escrow and vault', () => {
+    const instruction = buildOpenEscrow({ consumer: agent, mint })
+    expect(decodeInstruction(instruction).name).toBe('open_escrow')
+    expect(meta(instruction).slice(0, 5)).toEqual([
+      [agent.toBase58(), true, true],
+      [configPda()[0].toBase58(), false, false],
+      [escrow.toBase58(), false, true],
+      [mint.toBase58(), false, false],
+      [vaultPda(escrow)[0].toBase58(), false, true],
+    ])
+  })
+
+  it('deposit survives a round-trip and moves tokens from the given account', () => {
+    const source = Keypair.generate().publicKey
+    const instruction = buildDeposit({ consumer: agent, source, amount: 5_000_000n })
+    expect(decodeInstruction(instruction).data).toEqual({ amount: 5_000_000n })
+    expect(meta(instruction).slice(0, 4)).toEqual([
+      [agent.toBase58(), true, false],
+      [escrow.toBase58(), false, true],
+      [vaultPda(escrow)[0].toBase58(), false, true],
+      [source.toBase58(), false, true],
+    ])
   })
 })

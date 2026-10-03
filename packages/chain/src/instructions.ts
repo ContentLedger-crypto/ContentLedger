@@ -222,6 +222,37 @@ export function buildSetWorkStatus(args: {
   )
 }
 
+export function buildOpenEscrow(args: {
+  consumer: PublicKey
+  mint: PublicKey
+}): TransactionInstruction {
+  const [escrow] = escrowPda(args.consumer)
+  return build('open_escrow', {}, [
+    { pubkey: args.consumer, isSigner: true, isWritable: true },
+    { pubkey: configPda()[0] },
+    { pubkey: escrow, isWritable: true },
+    { pubkey: args.mint },
+    { pubkey: vaultPda(escrow)[0], isWritable: true },
+    { pubkey: TOKEN_PROGRAM_ID },
+    { pubkey: SystemProgram.programId },
+  ])
+}
+
+export function buildDeposit(args: {
+  consumer: PublicKey
+  source: PublicKey
+  amount: bigint
+}): TransactionInstruction {
+  const [escrow] = escrowPda(args.consumer)
+  return build('deposit', { amount: u64(args.amount) }, [
+    { pubkey: args.consumer, isSigner: true },
+    { pubkey: escrow, isWritable: true },
+    { pubkey: vaultPda(escrow)[0], isWritable: true },
+    { pubkey: args.source, isWritable: true },
+    { pubkey: TOKEN_PROGRAM_ID },
+  ])
+}
+
 export interface SettleBatchArgs {
   authority: PublicKey
   consumer: PublicKey
