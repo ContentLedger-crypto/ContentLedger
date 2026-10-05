@@ -26,6 +26,7 @@ describe('план посіву', () => {
       'register_work https://acme-news.test/2026/solana-fee-market.html',
       'set_work_rates https://acme-news.test/2026/solana-fee-market.html',
       'register_work https://acme-news.test/data/2026-crawler-traffic.json',
+      'set_work_rates https://acme-news.test/data/2026-crawler-traffic.json',
       'register_work https://acme-news.test/archive/2019-open-web.md',
       'set_work_status https://acme-news.test/archive/2019-open-web.md',
       'register_domain kyiv-photo.test',
@@ -116,6 +117,14 @@ describe('інструкції плану', () => {
         rate_inference: null,
       },
     )
+
+    // Neither rate divides by the protocol fee, so a session over this work rounds the fee.
+    expect(
+      decoded('set_work_rates', 'https://acme-news.test/data/2026-crawler-traffic.json'),
+    ).toEqual({
+      rate_train: 2_001n,
+      rate_inference: 333n,
+    })
 
     expect(decoded('set_work_rates', 'https://kyiv-photo.test/about/licence.md')).toEqual({
       rate_train: 0n,

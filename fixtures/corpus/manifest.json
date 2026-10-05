@@ -23,7 +23,9 @@
         {
           "path": "/data/2026-crawler-traffic.json",
           "mediaType": "application/json",
-          "status": "active"
+          "status": "active",
+          "rateTrain": "2001",
+          "rateInference": "333"
         },
         {
           "path": "/archive/2019-open-web.md",
