@@ -1,4 +1,5 @@
 import {
+  awaitSignature,
   type Config,
   coder,
   configPda,
@@ -10,6 +11,7 @@ import {
   escrowPda,
   PROGRAM_ID,
   settlementLogPda,
+  type WatchOptions,
 } from '@contentledger/chain'
 import type { BN } from '@coral-xyz/anchor'
 import {
@@ -52,7 +54,8 @@ type SettlementConnection = Pick<
   | 'getMultipleAccountsInfo'
   | 'getLatestBlockhash'
   | 'sendRawTransaction'
-  | 'confirmTransaction'
+  | 'getSignatureStatuses'
+  | 'getBlockHeight'
   | 'getSignaturesForAddress'
   | 'getTransaction'
 >
@@ -60,6 +63,8 @@ type SettlementConnection = Pick<
 export function rpcSettlementChain(
   connection: SettlementConnection,
   operator: Keypair,
+  // Finalization takes ~13 s and nothing waits on it but the next batch.
+  watch: WatchOptions = { pollMs: 2000 },
 ): SettlementChain {
   return {
     async read(consumer, domains) {
@@ -93,11 +98,17 @@ export function rpcSettlementChain(
       const signature = await connection.sendRawTransaction(tx.serialize(), {
         preflightCommitment: 'finalized',
       })
-      const { value } = await connection.confirmTransaction(
-        { signature, blockhash, lastValidBlockHeight },
-        'finalized',
+      const settled = await awaitSignature(
+        connection,
+        { signature, lastValidBlockHeight, commitment: 'finalized' },
+        watch,
       )
-      if (value.err) throw new Error(`settlement ${signature} failed: ${JSON.stringify(value.err)}`)
+      if (settled.status === 'failed') {
+        throw new Error(`settlement ${signature} failed: ${JSON.stringify(settled.err)}`)
+      }
+      if (settled.status === 'expired') {
+        throw new Error(`settlement ${signature} expired before it landed`)
+      }
       return signature
     },
 

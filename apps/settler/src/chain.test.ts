@@ -7,12 +7,13 @@ import {
   PROGRAM_ID,
   settlementLogPda,
 } from '@contentledger/chain'
-import { BN } from '@coral-xyz/anchor'
+import { BN, utils } from '@coral-xyz/anchor'
 import {
   type AccountInfo,
   type Connection,
   Keypair,
   PublicKey,
+  type SignatureStatus,
   Transaction,
   type TransactionInstruction,
 } from '@solana/web3.js'
@@ -168,6 +169,62 @@ describe('rpcSettlementChain', () => {
   it('refuses to settle to a domain that is not registered', async () => {
     const { chain } = reader(PROGRAM_ID, false)
     await expect(chain.read(agent.toBase58(), [domain.toBase58()])).rejects.toThrow(/Domain/)
+  })
+
+  describe('submit', () => {
+    const internal = () => new Error('failed to get signature status: Internal error')
+
+    const cluster = (statuses: (SignatureStatus | null | Error)[], height = 100) => {
+      const sent: Buffer[] = []
+      let polled = 0
+      const connection = {
+        getLatestBlockhash: async () => ({
+          blockhash: Keypair.generate().publicKey.toBase58(),
+          lastValidBlockHeight: 150,
+        }),
+        sendRawTransaction: async (raw: Buffer) => {
+          sent.push(raw)
+          return utils.bytes.bs58.encode(Transaction.from(raw).signature ?? new Uint8Array())
+        },
+        getSignatureStatuses: async () => {
+          const step = statuses[Math.min(polled, statuses.length - 1)]
+          polled += 1
+          if (step instanceof Error) throw step
+          return { context: { slot: 1 }, value: [step ?? null] }
+        },
+        getBlockHeight: async () => height,
+      } as unknown as Connection
+      return { chain: rpcSettlementChain(connection, operator, { pollMs: 0 }), sent }
+    }
+
+    const at = (
+      confirmationStatus: SignatureStatus['confirmationStatus'],
+      err: SignatureStatus['err'] = null,
+    ): SignatureStatus => ({ slot: 1, confirmations: null, err, confirmationStatus })
+
+    it('resolves with the signature once the settlement is finalized', async () => {
+      const { chain, sent } = cluster([null, at('confirmed'), at('finalized')])
+      const signature = await chain.submit(settle(1))
+      const tx = Transaction.from(sent[0] as Buffer)
+      expect(tx.verifySignatures()).toBe(true)
+      expect(signature).toBe(utils.bytes.bs58.encode(tx.signature ?? new Uint8Array()))
+    })
+
+    it('outlasts an RPC error mid-confirmation without sending the settlement again', async () => {
+      const { chain, sent } = cluster([at('confirmed'), internal(), at('finalized')])
+      await expect(chain.submit(settle(1))).resolves.toEqual(expect.any(String))
+      expect(sent).toHaveLength(1)
+    })
+
+    it('throws when the settlement executed with an error', async () => {
+      const { chain } = cluster([at('finalized', { InstructionError: [1, { Custom: 6011 }] })])
+      await expect(chain.submit(settle(1))).rejects.toThrow(/failed: .*6011/)
+    })
+
+    it('throws when the blockhash expired before the settlement landed', async () => {
+      const { chain } = cluster([null], 151)
+      await expect(chain.submit(settle(1))).rejects.toThrow(/expired/)
+    })
   })
 
   describe('findSettlement', () => {

@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto'
-import { associatedTokenAddress, x402ProofMessage } from '@contentledger/chain'
+import {
+  associatedTokenAddress,
+  awaitSignature,
+  type WatchOptions,
+  x402ProofMessage,
+} from '@contentledger/chain'
 import { receiptId, USDC_DECIMALS, type UseType } from '@contentledger/shared'
 import { utils } from '@coral-xyz/anchor'
 import { ed25519 } from '@noble/curves/ed25519'
@@ -126,7 +131,7 @@ export function checkX402Delivery(
 
 type RailConnection = Pick<
   Connection,
-  'getLatestBlockhash' | 'sendRawTransaction' | 'confirmTransaction'
+  'getLatestBlockhash' | 'sendRawTransaction' | 'getSignatureStatuses' | 'getBlockHeight'
 >
 
 /**
@@ -134,7 +139,12 @@ type RailConnection = Pick<
  * the cluster deduplicates by signature, and that is what lets a payment journaled before
  * a crash be landed afterwards instead of lost.
  */
-export function rpcPaymentRail(connection: RailConnection, payer: Keypair): PaymentRail {
+export function rpcPaymentRail(
+  connection: RailConnection,
+  payer: Keypair,
+  // The request waits on this: `confirmed` arrives in about a second.
+  watch: WatchOptions = { pollMs: 400 },
+): PaymentRail {
   return {
     async prepare(instructions) {
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
@@ -149,7 +159,7 @@ export function rpcPaymentRail(connection: RailConnection, payer: Keypair): Paym
       }
     },
 
-    async land({ signature, transaction, blockhash, lastValidBlockHeight }) {
+    async land({ signature, transaction, lastValidBlockHeight }) {
       try {
         await connection.sendRawTransaction(Buffer.from(transaction, 'base64'), {
           preflightCommitment: 'confirmed',
@@ -163,18 +173,12 @@ export function rpcPaymentRail(connection: RailConnection, payer: Keypair): Paym
           throw error
         }
       }
-      try {
-        const { value } = await connection.confirmTransaction(
-          { signature, blockhash, lastValidBlockHeight },
-          'confirmed',
-        )
-        return value.err === null ? 'landed' : 'failed'
-      } catch (error) {
-        if (error instanceof Error && error.name === 'TransactionExpiredBlockheightExceededError') {
-          return 'expired'
-        }
-        throw error
-      }
+      const { status } = await awaitSignature(
+        connection,
+        { signature, lastValidBlockHeight, commitment: 'confirmed' },
+        watch,
+      )
+      return status
     },
   }
 }

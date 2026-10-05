@@ -1,4 +1,5 @@
 export * from './accounts.js'
+export * from './confirm.js'
 export * from './identifiers.js'
 export * from './instructions.js'
 export * from './pda.js'

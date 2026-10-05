@@ -12,8 +12,8 @@ import {
   Keypair,
   PublicKey,
   SendTransactionError,
+  type SignatureStatus,
   Transaction,
-  TransactionExpiredBlockheightExceededError,
 } from '@solana/web3.js'
 import { describe, expect, it } from 'vitest'
 import type { Quote, X402Method } from './protocol.js'
@@ -210,11 +210,19 @@ describe('checkX402Delivery', () => {
 describe('rpcPaymentRail', () => {
   const BLOCKHASH = Keypair.generate().publicKey.toBase58()
 
+  const at = (
+    confirmationStatus: SignatureStatus['confirmationStatus'],
+    err: SignatureStatus['err'] = null,
+  ): SignatureStatus => ({ slot: 1, confirmations: null, err, confirmationStatus })
+
   const connection = (behaviour: {
     send?: () => Promise<string>
-    confirm?: () => Promise<{ value: { err: unknown } }>
+    statuses?: (SignatureStatus | null | Error)[]
+    height?: number
   }) => {
     const sent: Buffer[] = []
+    const statuses = behaviour.statuses ?? [at('confirmed')]
+    let polled = 0
     return {
       sent,
       getLatestBlockhash: async () => ({ blockhash: BLOCKHASH, lastValidBlockHeight: 500 }),
@@ -222,10 +230,18 @@ describe('rpcPaymentRail', () => {
         sent.push(Buffer.from(raw as Uint8Array))
         return behaviour.send ? behaviour.send() : 'sent'
       },
-      confirmTransaction: async () =>
-        behaviour.confirm ? behaviour.confirm() : { context: { slot: 1 }, value: { err: null } },
+      getSignatureStatuses: async () => {
+        const step = statuses[Math.min(polled, statuses.length - 1)]
+        polled += 1
+        if (step instanceof Error) throw step
+        return { context: { slot: 1 }, value: [step ?? null] }
+      },
+      getBlockHeight: async () => behaviour.height ?? 100,
     } as unknown as Parameters<typeof rpcPaymentRail>[0] & { sent: Buffer[] }
   }
+
+  const rail = (conn: Parameters<typeof rpcPaymentRail>[0]) =>
+    rpcPaymentRail(conn, payer, { pollMs: 0 })
 
   const instructions = () => {
     const built = paymentInstructions(payer.publicKey, method(), quote)
@@ -234,7 +250,7 @@ describe('rpcPaymentRail', () => {
   }
 
   it('signs a payment whose signature is the one the transaction carries', async () => {
-    const prepared = await rpcPaymentRail(connection({}), payer).prepare(instructions())
+    const prepared = await rail(connection({})).prepare(instructions())
     const tx = Transaction.from(Buffer.from(prepared.transaction, 'base64'))
     expect(tx.verifySignatures()).toBe(true)
     expect(utils.bytes.bs58.encode(tx.signature ?? new Uint8Array())).toBe(prepared.signature)
@@ -242,15 +258,27 @@ describe('rpcPaymentRail', () => {
   })
 
   it('lands a payment the cluster confirms', async () => {
-    const conn = connection({})
-    const rail = rpcPaymentRail(conn, payer)
-    const prepared = await rail.prepare(instructions())
-    expect(await rail.land(prepared)).toBe('landed')
+    const conn = connection({ statuses: [null, at('processed'), at('confirmed')] })
+    const payments = rail(conn)
+    expect(await payments.land(await payments.prepare(instructions()))).toBe('landed')
+    expect(conn.sent).toHaveLength(1)
+  })
+
+  it('outlasts an RPC error mid-confirmation without sending the payment again', async () => {
+    const conn = connection({
+      statuses: [
+        at('processed'),
+        new Error('failed to get signature status: Internal error'),
+        at('confirmed'),
+      ],
+    })
+    const payments = rail(conn)
+    expect(await payments.land(await payments.prepare(instructions()))).toBe('landed')
     expect(conn.sent).toHaveLength(1)
   })
 
   it('takes a payment sent again after it already landed as landed', async () => {
-    const rail = rpcPaymentRail(
+    const payments = rail(
       connection({
         send: async () => {
           throw new Error(
@@ -258,21 +286,19 @@ describe('rpcPaymentRail', () => {
           )
         },
       }),
-      payer,
     )
-    expect(await rail.land(await rail.prepare(instructions()))).toBe('landed')
+    expect(await payments.land(await payments.prepare(instructions()))).toBe('landed')
   })
 
   it('reports a payment that executed with an error as failed', async () => {
-    const rail = rpcPaymentRail(
-      connection({ confirm: async () => ({ value: { err: { InstructionError: [1, 'x'] } } }) }),
-      payer,
+    const payments = rail(
+      connection({ statuses: [at('confirmed', { InstructionError: [1, 'x'] })] }),
     )
-    expect(await rail.land(await rail.prepare(instructions()))).toBe('failed')
+    expect(await payments.land(await payments.prepare(instructions()))).toBe('failed')
   })
 
   it('reports a payment preflight refuses as failed rather than retrying it forever', async () => {
-    const rail = rpcPaymentRail(
+    const payments = rail(
       connection({
         send: async () => {
           throw new SendTransactionError({
@@ -283,32 +309,25 @@ describe('rpcPaymentRail', () => {
           })
         },
       }),
-      payer,
     )
-    expect(await rail.land(await rail.prepare(instructions()))).toBe('failed')
+    expect(await payments.land(await payments.prepare(instructions()))).toBe('failed')
   })
 
   it('reports a payment whose blockhash expired before it landed', async () => {
-    const rail = rpcPaymentRail(
-      connection({
-        confirm: async () => {
-          throw new TransactionExpiredBlockheightExceededError('sig')
-        },
-      }),
-      payer,
-    )
-    expect(await rail.land(await rail.prepare(instructions()))).toBe('expired')
+    const payments = rail(connection({ statuses: [null], height: 501 }))
+    expect(await payments.land(await payments.prepare(instructions()))).toBe('expired')
   })
 
   it('surfaces a network failure instead of deciding the payment', async () => {
-    const rail = rpcPaymentRail(
+    const payments = rail(
       connection({
         send: async () => {
           throw new TypeError('fetch failed')
         },
       }),
-      payer,
     )
-    await expect(rail.land(await rail.prepare(instructions()))).rejects.toThrow(/fetch failed/)
+    await expect(payments.land(await payments.prepare(instructions()))).rejects.toThrow(
+      /fetch failed/,
+    )
   })
 })
