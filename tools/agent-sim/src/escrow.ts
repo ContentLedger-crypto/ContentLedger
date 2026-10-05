@@ -6,6 +6,9 @@ import {
   decodeEscrow,
   escrowPda,
   PROGRAM_ID,
+  type SendConnection,
+  sendAndAwait,
+  type WatchOptions,
 } from '@contentledger/chain'
 import { chainGenesis } from '@contentledger/shared'
 import { getAssociatedTokenAddressSync } from '@solana/spl-token'
@@ -13,8 +16,6 @@ import {
   type Connection,
   type Keypair,
   PublicKey,
-  sendAndConfirmTransaction,
-  Transaction,
   type TransactionInstruction,
 } from '@solana/web3.js'
 import type { Position } from './protocol.js'
@@ -56,9 +57,10 @@ export function depositInstructions(args: {
 }
 
 export async function deposit(
-  connection: Connection,
+  connection: SendConnection & Pick<Connection, 'getMultipleAccountsInfo'>,
   agent: Keypair,
   amount: bigint,
+  watch: WatchOptions = { pollMs: 400 },
 ): Promise<string> {
   const [configInfo, escrowInfo] = await connection.getMultipleAccountsInfo(
     [configPda()[0], escrowPda(agent.publicKey)[0]],
@@ -71,5 +73,5 @@ export async function deposit(
     amount,
     escrowExists: escrowInfo?.owner.equals(PROGRAM_ID) ?? false,
   })
-  return sendAndConfirmTransaction(connection, new Transaction().add(...instructions), [agent])
+  return sendAndAwait(connection, instructions, [agent], { commitment: 'confirmed', ...watch })
 }

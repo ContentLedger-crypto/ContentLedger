@@ -1,6 +1,12 @@
-import type { SignatureStatus } from '@solana/web3.js'
+import { utils } from '@coral-xyz/anchor'
+import { Keypair, type SignatureStatus, SystemProgram, Transaction } from '@solana/web3.js'
 import { describe, expect, it } from 'vitest'
-import { awaitSignature, type StatusConnection } from './confirm.js'
+import {
+  awaitSignature,
+  type SendConnection,
+  type StatusConnection,
+  sendAndAwait,
+} from './confirm.js'
 
 type Step = SignatureStatus | null | Error
 
@@ -120,5 +126,56 @@ describe('awaitSignature', () => {
       history: internal(),
     })
     expect(await awaitSignature(connection, watch('finalized'), fast)).toEqual({ status: 'landed' })
+  })
+})
+
+describe('sendAndAwait', () => {
+  const payer = Keypair.generate()
+  const transfer = () => [
+    SystemProgram.transfer({
+      fromPubkey: payer.publicKey,
+      toPubkey: Keypair.generate().publicKey,
+      lamports: 1,
+    }),
+  ]
+
+  const sender = (steps: Step[], height = 100) => {
+    const { connection } = cluster(steps, { height })
+    const sent: Buffer[] = []
+    const full: SendConnection = {
+      ...connection,
+      getLatestBlockhash: async () => ({
+        blockhash: Keypair.generate().publicKey.toBase58(),
+        lastValidBlockHeight: 150,
+      }),
+      sendRawTransaction: async (raw) => {
+        sent.push(Buffer.from(raw as Uint8Array))
+        return utils.bytes.bs58.encode(
+          Transaction.from(raw as Buffer).signature ?? new Uint8Array(),
+        )
+      },
+    }
+    return { connection: full, sent }
+  }
+
+  const opts = { commitment: 'confirmed', pollMs: 0 } as const
+
+  it('sends the signed transaction once and resolves with its signature when it lands', async () => {
+    const { connection, sent } = sender([null, internal(), status('confirmed')])
+    const signature = await sendAndAwait(connection, transfer(), [payer], opts)
+    expect(sent).toHaveLength(1)
+    const tx = Transaction.from(sent[0] as Buffer)
+    expect(tx.verifySignatures()).toBe(true)
+    expect(signature).toBe(utils.bytes.bs58.encode(tx.signature ?? new Uint8Array()))
+  })
+
+  it('throws when the transaction executed and failed', async () => {
+    const { connection } = sender([status('confirmed', { InstructionError: [0, 'x'] })])
+    await expect(sendAndAwait(connection, transfer(), [payer], opts)).rejects.toThrow(/failed/)
+  })
+
+  it('throws when its blockhash expired before it landed', async () => {
+    const { connection } = sender([null], 151)
+    await expect(sendAndAwait(connection, transfer(), [payer], opts)).rejects.toThrow(/expired/)
   })
 })

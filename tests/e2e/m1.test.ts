@@ -20,17 +20,11 @@ import {
   decodeConfig,
   escrowPda,
   PROGRAM_ID,
+  sendAndAwait,
   vaultPda,
 } from '@contentledger/chain'
 import type { UseType } from '@contentledger/shared'
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  SystemProgram,
-  sendAndConfirmTransaction,
-  Transaction,
-} from '@solana/web3.js'
+import { Connection, Keypair, PublicKey, SystemProgram } from '@solana/web3.js'
 import { expect, it } from 'vitest'
 import { z } from 'zod'
 import { attempt, tamperVoucher, unknownSignature } from './attacks.js'
@@ -551,12 +545,11 @@ it('M1 on devnet: 1000 paid requests, SC-001, SC-002, SC-005, SC-006, SC-008', a
     const operator = loadKeypair(resolve(ROOT, env.OPERATOR_KEYPAIR_PATH)).publicKey
     const left = await harness.getBalance(agent).catch(() => 0)
     if (left > 5_000) {
-      await sendAndConfirmTransaction(
+      await sendAndAwait(
         harness,
-        new Transaction().add(
-          SystemProgram.transfer({ fromPubkey: agent, toPubkey: operator, lamports: left - 5_000 }),
-        ),
+        [SystemProgram.transfer({ fromPubkey: agent, toPubkey: operator, lamports: left - 5_000 })],
         [agentKeypair],
+        { commitment: 'confirmed', pollMs: 400 },
       ).catch((error: unknown) => progress(`SOL not returned: ${redact(String(error))}`))
     }
   }

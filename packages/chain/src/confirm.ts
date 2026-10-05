@@ -1,4 +1,11 @@
-import type { Connection, SignatureStatus, TransactionError } from '@solana/web3.js'
+import {
+  type Connection,
+  type Keypair,
+  type SignatureStatus,
+  Transaction,
+  type TransactionError,
+  type TransactionInstruction,
+} from '@solana/web3.js'
 
 export type StatusConnection = Pick<Connection, 'getSignatureStatuses' | 'getBlockHeight'>
 
@@ -18,6 +25,9 @@ export interface WatchOptions {
   /** Failed RPC rounds in a row tolerated before the last error is thrown to the caller. */
   maxFailures?: number
 }
+
+export type SendConnection = StatusConnection &
+  Pick<Connection, 'getLatestBlockhash' | 'sendRawTransaction'>
 
 const RANK = { processed: 0, confirmed: 1, finalized: 2 } as const
 
@@ -62,4 +72,31 @@ function decided(status: SignatureStatus, commitment: Watched['commitment']): Se
   const reached = status.confirmationStatus ?? 'processed'
   if (RANK[reached] < RANK[commitment]) return null
   return status.err === null ? { status: 'landed' } : { status: 'failed', err: status.err }
+}
+
+/** In place of web3.js `sendAndConfirmTransaction`, for the same reason as `awaitSignature`. */
+export async function sendAndAwait(
+  connection: SendConnection,
+  instructions: readonly TransactionInstruction[],
+  [payer, ...cosigners]: readonly [Keypair, ...Keypair[]],
+  { commitment, ...watch }: WatchOptions & { commitment: Watched['commitment'] },
+): Promise<string> {
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(commitment)
+  const tx = new Transaction({ feePayer: payer.publicKey, blockhash, lastValidBlockHeight })
+  tx.add(...instructions).sign(payer, ...cosigners)
+  const signature = await connection.sendRawTransaction(tx.serialize(), {
+    preflightCommitment: commitment,
+  })
+  const settled = await awaitSignature(
+    connection,
+    { signature, lastValidBlockHeight, commitment },
+    watch,
+  )
+  if (settled.status === 'failed') {
+    throw new Error(`transaction ${signature} failed: ${JSON.stringify(settled.err)}`)
+  }
+  if (settled.status === 'expired') {
+    throw new Error(`transaction ${signature} expired before it landed`)
+  }
+  return signature
 }
