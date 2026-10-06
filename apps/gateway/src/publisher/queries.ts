@@ -1,5 +1,5 @@
 import { acceptedAtColumns, domains, receipts, works } from '@contentledger/db'
-import { and, asc, desc, eq, gte, lt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, lt, type SQL, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import type { SessionWallet } from '../routes/auth.js'
 import type { Database } from '../store.js'
@@ -48,19 +48,21 @@ export type SummaryParams = z.output<typeof summaryParams>
 const ownedBy = (wallet: SessionWallet) =>
   and(eq(works.host, domains.host), eq(domains.owner, wallet))
 
+const receiptFields = {
+  id: receipts.id,
+  workId: receipts.workId,
+  sourceId: works.sourceId,
+  consumer: receipts.consumer,
+  useType: receipts.useType,
+  tariff: receipts.tariff,
+  acceptedAt: receipts.acceptedAt,
+  settledAt: receipts.settledAt,
+}
+
 export async function listReceipts(db: Database, wallet: SessionWallet, params: ReceiptsParams) {
   const after = params.cursor
   const rows = await db
-    .select({
-      id: receipts.id,
-      workId: receipts.workId,
-      sourceId: works.sourceId,
-      consumer: receipts.consumer,
-      useType: receipts.useType,
-      tariff: receipts.tariff,
-      acceptedAt: receipts.acceptedAt,
-      settledAt: receipts.settledAt,
-    })
+    .select(receiptFields)
     .from(receipts)
     .innerJoin(works, eq(receipts.workId, works.id))
     .innerJoin(domains, ownedBy(wallet))
@@ -100,3 +102,31 @@ export async function summarize(db: Database, wallet: SessionWallet, { from, to 
     byWork,
   }
 }
+
+export type ReceiptItem = Awaited<ReturnType<typeof listReceipts>>['items'][number]
+
+export const receiptJson = (item: ReceiptItem) => ({
+  ...item,
+  tariff: item.tariff.toString(),
+  settledAt: item.settledAt?.toISOString() ?? null,
+})
+
+/**
+ * The receipts a live event is about, each with the one wallet allowed to see it: the
+ * same join as the queries above, so the stream cannot show what the API would hide.
+ */
+function receiptsWithOwner(db: Database, where: SQL) {
+  return db
+    .select({ ...receiptFields, owner: domains.owner })
+    .from(receipts)
+    .innerJoin(works, eq(receipts.workId, works.id))
+    .innerJoin(domains, eq(works.host, domains.host))
+    .where(where)
+    .orderBy(asc(receipts.acceptedTs), asc(receipts.id))
+}
+
+export const issuedReceipt = (db: Database, id: string) =>
+  receiptsWithOwner(db, eq(receipts.id, id))
+
+export const settledReceipts = (db: Database, batchId: string) =>
+  receiptsWithOwner(db, eq(receipts.batchId, batchId))

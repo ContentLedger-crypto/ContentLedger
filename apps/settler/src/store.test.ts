@@ -1,5 +1,13 @@
 import { domainPda } from '@contentledger/chain'
-import { batches, domains, MIGRATIONS_DIR, receipts, vouchers, works } from '@contentledger/db'
+import {
+  batches,
+  domains,
+  MIGRATIONS_DIR,
+  receipts,
+  SETTLEMENT_CHANNEL,
+  vouchers,
+  works,
+} from '@contentledger/db'
 import { PGlite } from '@electric-sql/pglite'
 import { asc, eq, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
@@ -13,9 +21,10 @@ const OTHER = 'Other111111111111111111111111111111111111111'
 const hex = (byte: number) => byte.toString(16).padStart(2, '0').repeat(32)
 
 let db: ReturnType<typeof drizzle>
+let client: PGlite
 
 beforeAll(async () => {
-  const client = new PGlite()
+  client = new PGlite()
   // Supabase ships these roles; the RLS migration names them in its policies.
   await client.exec('create role anon; create role authenticated;')
   db = drizzle(client)
@@ -202,6 +211,35 @@ describe('recordBatch', () => {
       .where(eq(receipts.id, hex(2)))
     expect(second?.batchId).toBeNull()
     expect(second?.settledAt).toBeNull()
+  })
+})
+
+describe('recordBatch notification', () => {
+  async function heard(run: () => Promise<unknown>): Promise<string[]> {
+    const payloads: string[] = []
+    const unlisten = await client.listen(SETTLEMENT_CHANNEL, (payload) => payloads.push(payload))
+    try {
+      await run().catch(() => {})
+    } finally {
+      await unlisten()
+    }
+    return payloads
+  }
+
+  it('tells listeners the batch id once it is committed', async () => {
+    await issue(AGENT, 1)
+    const pending = (await loadPending(db)).get(AGENT) ?? []
+    expect(await heard(() => recordBatch(db, AGENT, batchOf(pending), settlement()))).toEqual([
+      hex(1),
+    ])
+  })
+
+  it('tells nobody about a batch that rolled back', async () => {
+    await issue(AGENT, 1)
+    await issue(AGENT, 2)
+    const pending = (await loadPending(db)).get(AGENT) ?? []
+    await recordBatch(db, AGENT, batchOf(pending.slice(0, 1)), settlement())
+    expect(await heard(() => recordBatch(db, AGENT, batchOf(pending), settlement()))).toEqual([])
   })
 })
 

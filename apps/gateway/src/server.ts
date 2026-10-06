@@ -1,3 +1,4 @@
+import { SETTLEMENT_CHANNEL } from '@contentledger/db'
 import { serve } from '@hono/node-server'
 import { getConnInfo } from '@hono/node-server/conninfo'
 import { Connection } from '@solana/web3.js'
@@ -8,6 +9,8 @@ import { createApp } from './app.js'
 import { offerStore } from './offers.js'
 import { fixturesOrigin } from './origin.js'
 import { rpcPayments } from './payments.js'
+import { publisherFeed } from './publisher/feed.js'
+import { listenForSettlements, notifyThrough, postgresListen } from './publisher/listen.js'
 import { clientAddress, tokenBucket } from './rate-limit.js'
 import { rpcOwnedWorks, rpcRegistry } from './registry.js'
 import { authRoutes } from './routes/auth.js'
@@ -20,6 +23,8 @@ const env = z
   .object({
     SOLANA_RPC_URL: z.url(),
     DATABASE_URL: z.url(),
+    // LISTEN needs a session of its own; the transaction pooler hands each statement elsewhere.
+    DATABASE_LISTEN_URL: z.url(),
     FIXTURES_BASE_URL: z.url(),
     SOLANA_CLUSTER: z.enum(['mainnet', 'devnet', 'testnet', 'localnet']),
     DASHBOARD_ORIGIN: z.string().refine((value) => URL.parse(value)?.origin === value, {
@@ -43,6 +48,10 @@ const SIGN_INS = { capacity: 10, perSecond: 0.1 }
 // A dashboard opens with two requests and pages on demand; the live feed is one stream.
 // The burst leaves room for three dashboards behind one address, as in the M2 run.
 const PUBLISHER_READS = { capacity: 30, perSecond: 1 }
+// Three dashboards behind one address with room to spare; proxies drop a connection
+// idle for about a minute, so the heartbeat comes well inside that.
+const STREAMS = { maxPerAddress: 10, heartbeatMs: 15_000 }
+const PROBE = { probeMs: 30_000, echoTimeoutMs: 5_000 }
 
 // The transaction pooler (6543) does not keep prepared statements across transactions.
 const sql = postgres(env.DATABASE_URL, { prepare: false })
@@ -51,6 +60,15 @@ const connection = new Connection(env.SOLANA_RPC_URL, 'confirmed')
 const registry = rpcRegistry(connection)
 const now = () => new Date()
 const clock = () => Date.now()
+const feed = publisherFeed(db)
+const closing = new AbortController()
+const settlements = listenForSettlements({
+  connect: postgresListen(env.DATABASE_LISTEN_URL, SETTLEMENT_CHANNEL),
+  notify: notifyThrough(db, SETTLEMENT_CHANNEL),
+  onSettled: (batchId) => void feed.batchSettled(batchId),
+  onResync: feed.resync,
+  ...PROBE,
+})
 const addressOf = clientAddress(
   env.TRUSTED_PROXY_HOPS,
   (c) => getConnInfo(c).remote.address ?? 'unknown',
@@ -70,6 +88,7 @@ const app = createApp(
       requests: tokenBucket({ ...REQUESTS, now: clock }),
       drafts: tokenBucket({ ...DRAFTS, now: clock }),
     },
+    feed,
   }),
   publicRoutes(db),
   authRoutes({
@@ -85,6 +104,9 @@ const app = createApp(
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     registry: rpcOwnedWorks(connection),
     limits: { addressOf, publisher: tokenBucket({ ...PUBLISHER_READS, now: clock }) },
+    feed,
+    streams: STREAMS,
+    closing: closing.signal,
   }),
 )
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
@@ -92,5 +114,9 @@ const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
 })
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(signal, () => server.close(() => void sql.end({ timeout: 5 })))
+  process.on(signal, () => {
+    closing.abort()
+    void settlements.stop()
+    server.close(() => void sql.end({ timeout: 5 }))
+  })
 }

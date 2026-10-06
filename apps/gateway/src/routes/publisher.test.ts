@@ -14,6 +14,7 @@ import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../app.js'
+import { publisherFeed } from '../publisher/feed.js'
 import { PAGE_SIZE } from '../publisher/queries.js'
 import type { RateLimiter } from '../rate-limit.js'
 import type { OwnedWorksReader } from '../registry.js'
@@ -43,6 +44,9 @@ const deps = (): PublisherDeps => ({
   dashboardOrigin: DASHBOARD,
   registry,
   limits: { addressOf: () => '203.0.113.9', publisher: limiter },
+  feed: publisherFeed(db),
+  streams: { maxPerAddress: 10, heartbeatMs: 15_000 },
+  closing: new AbortController().signal,
 })
 
 const get = (path: string, wallet?: string, headers: Record<string, string> = {}) =>

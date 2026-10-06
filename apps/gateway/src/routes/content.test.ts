@@ -73,6 +73,7 @@ let agent: Keypair
 let escrow: PublicKey
 let app: ReturnType<typeof createApp>
 let deps: ContentDeps
+let issued: string[]
 
 const config: Config = {
   authority: OWNER,
@@ -172,6 +173,7 @@ beforeEach(async () => {
   const now = () => new Date(world.now)
   const offers = offerStore({ ttlMs: 60_000, maxBytes: 1 << 20, now })
   const unlimited = tokenBucket({ capacity: 1e9, perSecond: 1e9, now: () => world.now })
+  issued = []
   deps = {
     registry,
     db,
@@ -179,6 +181,11 @@ beforeEach(async () => {
     offers,
     payments,
     now,
+    feed: {
+      receiptIssued: async (id) => {
+        issued.push(id)
+      },
+    },
     limits: {
       addressOf: (c) => c.req.header('X-Test-Address') ?? '127.0.0.1',
       requests: unlimited,
@@ -379,6 +386,7 @@ describe('GET /v1/content with an escrow voucher', () => {
     expect(bytes).toEqual(CONTENT)
     expect(sha256(bytes)).toBe(offer.body.servedHash)
     expect(receiptOf(res)).toEqual({ id: receiptId(offer.body), ...offer.body, hashMatch: true })
+    expect(issued).toEqual([receiptId(offer.body)])
 
     expect(await db.select().from(receipts)).toHaveLength(1)
     expect(await db.select().from(vouchers)).toMatchObject([{ seq: 1n, cumulative: 2200n }])
@@ -494,6 +502,7 @@ describe('GET /v1/content with an escrow voucher', () => {
     const loser = a.status === 400 ? a : b
     expect((await errorOf(loser)).details.reason).toBe('replayed')
     expect(await db.select().from(vouchers)).toHaveLength(1)
+    expect(issued).toHaveLength(1)
   })
 
   it('does not serve again when a used voucher is presented later', async () => {
@@ -577,6 +586,7 @@ describe('GET /v1/content with an x402 payment', () => {
       paymentRef: signature,
     }
     expect(receiptOf(res)).toEqual({ id: receiptId(body), ...body, hashMatch: true })
+    expect(issued).toEqual([receiptId(body)])
 
     expect(await db.select().from(receipts)).toMatchObject([
       { paymentMethod: 'x402', paymentRef: signature, tariff: 2000n, settledAt: null },
@@ -613,6 +623,7 @@ describe('GET /v1/content with an x402 payment', () => {
     const loser = a.status === 400 ? a : b
     expect((await errorOf(loser)).details.reason).toBe('replayed')
     expect(await db.select().from(receipts)).toHaveLength(1)
+    expect(issued).toHaveLength(1)
   })
 
   it('does not serve again when a redeemed payment is presented later', async () => {

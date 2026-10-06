@@ -3,11 +3,19 @@ import { cors } from 'hono/cors'
 import { z } from 'zod'
 import { redactKeys } from '../app.js'
 import { apiError, errorChain } from '../errors.js'
-import { listReceipts, receiptsParams, summarize, summaryParams } from '../publisher/queries.js'
+import type { Feed } from '../publisher/feed.js'
+import {
+  listReceipts,
+  receiptJson,
+  receiptsParams,
+  summarize,
+  summaryParams,
+} from '../publisher/queries.js'
 import type { RateLimiter } from '../rate-limit.js'
 import type { OwnedWorksReader } from '../registry.js'
 import type { Database } from '../store.js'
 import { requireSession } from './auth.js'
+import { type StreamLimits, streamHandler } from './stream.js'
 
 export interface PublisherDeps {
   db: Database
@@ -19,6 +27,10 @@ export interface PublisherDeps {
     /** By client address and ahead of the session check: a guessed token still costs a lookup. */
     publisher: RateLimiter
   }
+  feed: Feed
+  streams: StreamLimits
+  /** Aborted on shutdown: an open stream would otherwise hold the server open for good. */
+  closing: AbortSignal
 }
 
 export function publisherRoutes({
@@ -27,6 +39,9 @@ export function publisherRoutes({
   dashboardOrigin,
   registry,
   limits,
+  feed,
+  streams,
+  closing,
 }: PublisherDeps): Hono {
   const app = new Hono()
   const session = requireSession(db, now)
@@ -51,11 +66,7 @@ export function publisherRoutes({
 
     const page = await listReceipts(db, c.get('wallet'), params.data)
     return c.json({
-      items: page.items.map((item) => ({
-        ...item,
-        tariff: item.tariff.toString(),
-        settledAt: item.settledAt?.toISOString() ?? null,
-      })),
+      items: page.items.map(receiptJson),
       nextCursor: page.nextCursor,
     })
   })
@@ -81,6 +92,12 @@ export function publisherRoutes({
       registeredWorks,
     })
   })
+
+  app.get(
+    '/v1/publisher/stream',
+    session,
+    streamHandler({ feed, now, addressOf: limits.addressOf, limits: streams, closing }),
+  )
 
   return app
 }

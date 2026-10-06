@@ -10,6 +10,7 @@ import { checkFunds } from '../escrow.js'
 import type { Offer, OfferStore } from '../offers.js'
 import type { ContentOrigin } from '../origin.js'
 import type { PaymentReader } from '../payments.js'
+import type { Feed } from '../publisher/feed.js'
 import type { RateLimiter } from '../rate-limit.js'
 import type { PaidRegistryReader, RegistrySnapshot, SlottedRegistrySnapshot } from '../registry.js'
 import {
@@ -36,6 +37,7 @@ export interface ContentDeps {
   payments: PaymentReader
   now: () => Date
   limits: ContentLimits
+  feed: Pick<Feed, 'receiptIssued'>
 }
 
 export interface ContentLimits {
@@ -117,7 +119,7 @@ function refusal(snapshot: RegistrySnapshot, use: UseType): { quote: Quote } | R
 }
 
 export function contentRoutes(deps: ContentDeps): Hono {
-  const { registry, db, origin, offers, payments, now, limits } = deps
+  const { registry, db, origin, offers, payments, now, limits, feed } = deps
   const app = new Hono()
 
   app.get('/v1/content', async (c) => {
@@ -263,6 +265,7 @@ export function contentRoutes(deps: ContentDeps): Hono {
       return c.json(apiError('INVALID_INPUT', 'voucher rejected', { reason: recorded.reason }), 400)
     }
     offers.delete(held.id)
+    void feed.receiptIssued(recorded.receiptId)
     return deliver(c, recorded.receiptId, held.body, held.content, held.mediaType)
   }
 
@@ -316,6 +319,7 @@ export function contentRoutes(deps: ContentDeps): Hono {
       mirrorOf(snapshot, source, served.mediaType, served.bytes.length),
     )
     if (!recorded.ok) return paymentRejected(c, recorded.reason)
+    void feed.receiptIssued(recorded.receiptId)
     return deliver(c, recorded.receiptId, body, served.bytes, served.mediaType)
   }
 

@@ -198,16 +198,22 @@ export function authRoutes({ db, now, dashboardOrigin, cluster, limits }: AuthDe
   return app
 }
 
+export interface SessionVariables {
+  wallet: SessionWallet
+  sessionExpiresAt: Date
+}
+
 export function requireSession(db: Database, now: () => Date) {
-  return createMiddleware<{ Variables: { wallet: SessionWallet } }>(async (c, next) => {
+  return createMiddleware<{ Variables: SessionVariables }>(async (c, next) => {
     const token = bearer.exec(c.req.header('Authorization') ?? '')?.[1]
     if (token === undefined) return denied(c)
     const [session] = await db
-      .select({ wallet: sessions.wallet })
+      .select({ wallet: sessions.wallet, expiresAt: sessions.expiresAt })
       .from(sessions)
       .where(and(eq(sessions.tokenHash, sha256Hex(token)), gt(sessions.expiresAt, now())))
     if (session === undefined) return denied(c)
     c.set('wallet', session.wallet as SessionWallet)
+    c.set('sessionExpiresAt', session.expiresAt)
     await next()
   })
 }

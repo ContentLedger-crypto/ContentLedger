@@ -193,6 +193,7 @@ beforeEach(async () => {
         requests: unlimited,
         drafts: unlimited,
       },
+      feed: { receiptIssued: async () => {} },
     }),
     publicRoutes(db),
   )
