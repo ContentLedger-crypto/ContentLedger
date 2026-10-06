@@ -14,6 +14,9 @@ import type { Database } from '../store.js'
 
 export type Cluster = 'mainnet' | 'devnet' | 'testnet' | 'localnet'
 
+/** Minted only by `requireSession`: a wallet from a query string must not type-check as one. */
+export type SessionWallet = string & { readonly __brand: 'SessionWallet' }
+
 export interface AuthDeps {
   db: Database
   now: () => Date
@@ -196,7 +199,7 @@ export function authRoutes({ db, now, dashboardOrigin, cluster, limits }: AuthDe
 }
 
 export function requireSession(db: Database, now: () => Date) {
-  return createMiddleware<{ Variables: { wallet: string } }>(async (c, next) => {
+  return createMiddleware<{ Variables: { wallet: SessionWallet } }>(async (c, next) => {
     const token = bearer.exec(c.req.header('Authorization') ?? '')?.[1]
     if (token === undefined) return denied(c)
     const [session] = await db
@@ -204,7 +207,7 @@ export function requireSession(db: Database, now: () => Date) {
       .from(sessions)
       .where(and(eq(sessions.tokenHash, sha256Hex(token)), gt(sessions.expiresAt, now())))
     if (session === undefined) return denied(c)
-    c.set('wallet', session.wallet)
+    c.set('wallet', session.wallet as SessionWallet)
     await next()
   })
 }
