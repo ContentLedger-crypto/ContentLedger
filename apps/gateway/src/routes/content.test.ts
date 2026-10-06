@@ -31,9 +31,10 @@ import { createApp } from '../app.js'
 import { offerStore } from '../offers.js'
 import type { ContentOrigin } from '../origin.js'
 import type { PaymentReader } from '../payments.js'
+import { tokenBucket } from '../rate-limit.js'
 import type { EscrowSnapshot, PaidRegistryReader, PaidRegistrySnapshot } from '../registry.js'
 import type { EscrowReceiptBody } from '../voucher.js'
-import { contentRoutes } from './content.js'
+import { type ContentDeps, contentRoutes } from './content.js'
 
 const SOURCE = 'https://acme-news.test/2026/ai-act-explained.html'
 const OTHER_SOURCE = 'https://acme-news.test/2026/solana-fee-market.html'
@@ -71,6 +72,7 @@ let world: World
 let agent: Keypair
 let escrow: PublicKey
 let app: ReturnType<typeof createApp>
+let deps: ContentDeps
 
 const config: Config = {
   authority: OWNER,
@@ -169,7 +171,21 @@ beforeEach(async () => {
   }
   const now = () => new Date(world.now)
   const offers = offerStore({ ttlMs: 60_000, maxBytes: 1 << 20, now })
-  app = createApp(contentRoutes({ registry, db, origin, offers, payments, now }))
+  const unlimited = tokenBucket({ capacity: 1e9, perSecond: 1e9, now: () => world.now })
+  deps = {
+    registry,
+    db,
+    origin,
+    offers,
+    payments,
+    now,
+    limits: {
+      addressOf: (c) => c.req.header('X-Test-Address') ?? '127.0.0.1',
+      requests: unlimited,
+      drafts: unlimited,
+    },
+  }
+  app = createApp(contentRoutes(deps))
 })
 
 const url = (use = 'train') => `/v1/content?source=${encodeURIComponent(SOURCE)}&use=${use}`
@@ -291,6 +307,64 @@ describe('GET /v1/content without payment', () => {
       `/v1/content?source=${encodeURIComponent('https://other.test/x.html')}&use=train`,
     )
     expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /v1/content rate limits', () => {
+  const ATTACKER = '198.51.100.66'
+  const AGENT_HOST = '203.0.113.7'
+
+  const limited = (requests: number, drafts: number) => {
+    const bucket = (capacity: number) =>
+      tokenBucket({ capacity, perSecond: 1 / 3600, now: () => world.now })
+    app = createApp(
+      contentRoutes({
+        ...deps,
+        limits: { ...deps.limits, requests: bucket(requests), drafts: bucket(drafts) },
+      }),
+    )
+  }
+
+  const from = (address: string, headers: Record<string, string> = {}) =>
+    request({ 'X-Test-Address': address, ...headers })
+
+  const asAgent = { 'X-ContentLedger-Consumer': '' }
+  beforeEach(() => {
+    asAgent['X-ContentLedger-Consumer'] = agent.publicKey.toBase58()
+  })
+
+  it('answers 429 with Retry-After once an address spends its budget, before any work', async () => {
+    limited(2, 100)
+    expect((await from(ATTACKER, asAgent)).status).toBe(402)
+    expect((await from(ATTACKER, asAgent)).status).toBe(402)
+    const refused = await from(ATTACKER, asAgent)
+    expect(refused.status).toBe(429)
+    expect(refused.headers.get('Retry-After')).toBe('3600')
+    expect((await errorOf(refused)).code).toBe('RATE_LIMITED')
+    expect(world.originCalls).toBe(2)
+    expect((await from(AGENT_HOST)).status).toBe(402)
+  })
+
+  // The consumer header is unsigned at this point: a budget per escrow alone would let
+  // anyone who names the agent's key starve the agent itself.
+  it('spends the draft budget per address and escrow, so a flood naming the agent starves only itself', async () => {
+    limited(100, 2)
+    await from(ATTACKER, asAgent)
+    await from(ATTACKER, asAgent)
+    expect((await from(ATTACKER, asAgent)).status).toBe(429)
+    expect(world.originCalls).toBe(2)
+    expect((await from(AGENT_HOST, asAgent)).status).toBe(402)
+    expect(world.originCalls).toBe(3)
+  })
+
+  it('leaves the draft budget alone when no draft is made', async () => {
+    limited(100, 1)
+    world.escrowOpen = false
+    for (let i = 0; i < 3; i += 1) expect((await from(AGENT_HOST, asAgent)).status).toBe(402)
+    expect((await from(AGENT_HOST)).status).toBe(402)
+    world.escrowOpen = true
+    expect((await from(AGENT_HOST, asAgent)).status).toBe(402)
+    expect(world.originCalls).toBe(1)
   })
 })
 

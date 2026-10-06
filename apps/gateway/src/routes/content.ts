@@ -10,6 +10,7 @@ import { checkFunds } from '../escrow.js'
 import type { Offer, OfferStore } from '../offers.js'
 import type { ContentOrigin } from '../origin.js'
 import type { PaymentReader } from '../payments.js'
+import type { RateLimiter } from '../rate-limit.js'
 import type { PaidRegistryReader, RegistrySnapshot, SlottedRegistrySnapshot } from '../registry.js'
 import {
   type Database,
@@ -34,6 +35,15 @@ export interface ContentDeps {
   offers: OfferStore
   payments: PaymentReader
   now: () => Date
+  limits: ContentLimits
+}
+
+export interface ContentLimits {
+  addressOf: (c: Context) => string
+  /** Every request, by client address. */
+  requests: RateLimiter
+  /** Drafts that fetch from the corpus before anything is paid, by address and escrow. */
+  drafts: RateLimiter
 }
 
 const CONSUMER = 'X-ContentLedger-Consumer'
@@ -79,6 +89,11 @@ const X402_REJECTIONS: Record<X402Rejection, string> = {
 const paymentRejected = (c: Context, reason: string) =>
   c.json(apiError('INVALID_INPUT', 'payment rejected', { reason }), 400)
 
+function tooMany(c: Context, retryAfter: number) {
+  c.header('Retry-After', String(retryAfter))
+  return c.json(apiError('RATE_LIMITED', 'too many requests', { retryAfter }), 429)
+}
+
 type Refusal = { status: 403 | 404; body: ReturnType<typeof apiError> }
 
 function refusal(snapshot: RegistrySnapshot, use: UseType): { quote: Quote } | Refusal {
@@ -102,10 +117,13 @@ function refusal(snapshot: RegistrySnapshot, use: UseType): { quote: Quote } | R
 }
 
 export function contentRoutes(deps: ContentDeps): Hono {
-  const { registry, db, origin, offers, payments, now } = deps
+  const { registry, db, origin, offers, payments, now, limits } = deps
   const app = new Hono()
 
   app.get('/v1/content', async (c) => {
+    const allowed = limits.requests.take(limits.addressOf(c))
+    if (!allowed.ok) return tooMany(c, allowed.retryAfter)
+
     const query = quoteQuery.safeParse(c.req.query())
     if (!query.success) {
       return c.json(
@@ -181,6 +199,9 @@ export function contentRoutes(deps: ContentDeps): Hono {
       const unavailable = funds.ok ? 'escrow-missing' : funds.reason
       return c.json(paymentRequired(quote, { unavailable }, reason), 402)
     }
+
+    const allowed = limits.drafts.take(`${limits.addressOf(c)} ${payer.toBase58()}`)
+    if (!allowed.ok) return tooMany(c, allowed.retryAfter)
 
     const served = await origin.fetch(source)
     const body: EscrowReceiptBody = {

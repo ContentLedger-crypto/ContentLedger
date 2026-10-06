@@ -11,6 +11,7 @@ import {
 import { MIGRATIONS_DIR, receipts, vouchers } from '@contentledger/db'
 import { createApp } from '@contentledger/gateway/src/app.js'
 import { offerStore } from '@contentledger/gateway/src/offers.js'
+import { tokenBucket } from '@contentledger/gateway/src/rate-limit.js'
 import type { PaidRegistrySnapshot } from '@contentledger/gateway/src/registry.js'
 import { contentRoutes } from '@contentledger/gateway/src/routes/content.js'
 import { publicRoutes } from '@contentledger/gateway/src/routes/public.js'
@@ -170,6 +171,7 @@ beforeEach(async () => {
   world = { now: Date.parse('2026-10-03T12:00:00.000Z'), vaultBalance: 1_000_000n, slot: 1n }
   keypair = Keypair.generate()
   const now = () => new Date(world.now)
+  const unlimited = tokenBucket({ capacity: 1e9, perSecond: 1e9, now: () => world.now })
   const app = createApp(
     contentRoutes({
       registry: { read: async (s) => snapshot(s), readWithEscrow: async (s) => snapshot(s) },
@@ -186,6 +188,11 @@ beforeEach(async () => {
         },
       },
       now,
+      limits: {
+        addressOf: () => '127.0.0.1',
+        requests: unlimited,
+        drafts: unlimited,
+      },
     }),
     publicRoutes(db),
   )

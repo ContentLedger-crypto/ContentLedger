@@ -3,6 +3,7 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'NOT_LICENSED'
   | 'PAYMENT_REQUIRED'
+  | 'RATE_LIMITED'
   | 'INTERNAL'
 
 export const apiError = <D extends Record<string, unknown>>(
