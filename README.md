@@ -78,21 +78,21 @@ internally consistent — fails one of the four steps.
 One run, 1,000 licensed requests (900 by escrow voucher, 100 by x402), on the commit
 recorded in the result. The full record — every transaction signature, the price feed
 used, per-process RPC usage — is in
-[`tests/e2e/results/m1-2026-10-05T15-30.json`](tests/e2e/results/m1-2026-10-05T15-30.json).
+[`tests/e2e/results/m1-2026-10-06T12-34.json`](tests/e2e/results/m1-2026-10-06T12-34.json).
 
 | Criterion | Budget | Measured | |
 |---|---|---|---|
-| Full cost of one licensed request, network fees included | < 0.1 cent | escrow 0.003 cent, x402 0.06 cent (SOL at $119.24) | pass |
-| Content delivered for a valid proof, p95 | < 3 s | escrow 0.73 s, x402 0.68 s | pass |
+| Full cost of one licensed request, network fees included | < 0.1 cent | escrow 0.003 cent, x402 0.06 cent (SOL at $120.37) | pass |
+| Content delivered for a valid proof, p95 | < 3 s | escrow 0.79 s, x402 0.82 s | pass |
 | Payouts equal payments, on tariffs that do not divide evenly | 0 base units apart | 0 apart over 5,550,429 base units; 167 receipts on a rounding boundary | pass |
 | A request without a valid proof gets no content | 100% of ≥ 50 attempts | 70 of 70 refused across 11 kinds, replays included | pass |
-| A thousand requests within a free RPC tier | < 1M credits a month | 2.97 credits a request, 336 such sessions a month | pass |
+| A thousand requests within a free RPC tier | < 1M credits a month | 2.91 credits a request, 343 such sessions a month | pass |
 
-Cost break-even: the escrow path stays under 0.1 cent until SOL reaches $4,000, x402
+Cost break-even: the escrow path stays under 0.1 cent until SOL reaches $4,615, x402
 until $200.
 
 Reported honestly as a miss: the **full x402 cycle** — from the first unpaid request to
-the content, the payment transaction's confirmation included — has a p95 of 4.3 s. It is
+the content, the payment transaction's confirmation included — has a p95 of 3.3 s. It is
 outside the 3 s budget, which applies to delivery against a proof; it is recorded in the
 result file as `fail` and is tracked for a later milestone.
 
