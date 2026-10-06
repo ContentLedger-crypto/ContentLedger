@@ -27,9 +27,16 @@ export const receiptsParams = z.strictObject({ cursor: cursor.optional() })
 
 const instant = z.iso.datetime().transform((value) => new Date(value))
 
+// A year and a leap day: enough for any calendar year, short enough that one request
+// cannot make the database aggregate a publisher's whole history.
+const MAX_PERIOD_MS = 366 * 24 * 60 * 60_000
+
 export const summaryParams = z
   .strictObject({ from: instant, to: instant })
   .refine(({ from, to }) => from < to, { message: 'from must precede to' })
+  .refine(({ from, to }) => Number(to) - Number(from) <= MAX_PERIOD_MS, {
+    message: 'period longer than 366 days',
+  })
 
 export type ReceiptsParams = z.output<typeof receiptsParams>
 export type SummaryParams = z.output<typeof summaryParams>

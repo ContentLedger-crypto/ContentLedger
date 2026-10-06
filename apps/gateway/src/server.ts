@@ -9,10 +9,11 @@ import { offerStore } from './offers.js'
 import { fixturesOrigin } from './origin.js'
 import { rpcPayments } from './payments.js'
 import { clientAddress, tokenBucket } from './rate-limit.js'
-import { rpcRegistry } from './registry.js'
+import { rpcOwnedWorks, rpcRegistry } from './registry.js'
 import { authRoutes } from './routes/auth.js'
 import { contentRoutes } from './routes/content.js'
 import { publicRoutes } from './routes/public.js'
+import { publisherRoutes } from './routes/publisher.js'
 import { quoteRoutes } from './routes/quote.js'
 
 const env = z
@@ -39,11 +40,15 @@ const REQUESTS = { capacity: 120, perSecond: 10 }
 const DRAFTS = { capacity: 20, perSecond: 2 }
 // A sign-in is two requests; this allows a handful in a row, then one every ten seconds.
 const SIGN_INS = { capacity: 10, perSecond: 0.1 }
+// A dashboard opens with two requests and pages on demand; the live feed is one stream.
+// The burst leaves room for three dashboards behind one address, as in the M2 run.
+const PUBLISHER_READS = { capacity: 30, perSecond: 1 }
 
 // The transaction pooler (6543) does not keep prepared statements across transactions.
 const sql = postgres(env.DATABASE_URL, { prepare: false })
 const db = drizzle(sql)
-const registry = rpcRegistry(new Connection(env.SOLANA_RPC_URL, 'confirmed'))
+const connection = new Connection(env.SOLANA_RPC_URL, 'confirmed')
+const registry = rpcRegistry(connection)
 const now = () => new Date()
 const clock = () => Date.now()
 const addressOf = clientAddress(
@@ -73,6 +78,13 @@ const app = createApp(
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     cluster: env.SOLANA_CLUSTER,
     limits: { addressOf, auth: tokenBucket({ ...SIGN_INS, now: clock }) },
+  }),
+  publisherRoutes({
+    db,
+    now,
+    dashboardOrigin: env.DASHBOARD_ORIGIN,
+    registry: rpcOwnedWorks(connection),
+    limits: { addressOf, publisher: tokenBucket({ ...PUBLISHER_READS, now: clock }) },
   }),
 )
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {

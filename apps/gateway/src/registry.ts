@@ -1,5 +1,6 @@
 import {
   type Config,
+  coder,
   configPda,
   type Domain,
   decodeConfig,
@@ -15,7 +16,7 @@ import {
   type Work,
   workPda,
 } from '@contentledger/chain'
-import type { AccountInfo, Connection, PublicKey } from '@solana/web3.js'
+import type { AccountInfo, Connection, GetProgramAccountsConfig, PublicKey } from '@solana/web3.js'
 
 export interface Located<T> {
   address: string
@@ -115,5 +116,47 @@ function escrowSnapshot(
     address: address.toBase58(),
     account: decodeEscrow(escrowInfo.data),
     vaultBalance: decodeTokenAmount(vaultInfo.data),
+  }
+}
+
+export interface OwnedWorksReader {
+  countWorks(owner: string): Promise<number>
+}
+
+interface ProgramAccountsReader {
+  getProgramAccounts(
+    programId: PublicKey,
+    config: GetProgramAccountsConfig,
+  ): Promise<ReadonlyArray<{ pubkey: PublicKey }>>
+}
+
+// Both accounts open with an 8-byte discriminator followed by the key we filter on:
+// Domain.owner and Work.domain. The discriminator filter keeps an Escrow, whose
+// consumer sits at the same offset, from passing for a domain.
+const KEY_OFFSET = 8
+
+/**
+ * Read from the chain, not the database mirror: the mirror holds only works that have
+ * been served, so a publisher who has just registered would be told they have none.
+ */
+export function rpcOwnedWorks(connection: ProgramAccountsReader): OwnedWorksReader {
+  const addresses = (account: 'Domain' | 'Work', key: string) =>
+    connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: 'confirmed',
+      dataSlice: { offset: 0, length: 0 },
+      filters: [
+        { memcmp: coder.accounts.memcmp(account) as { offset: number; bytes: string } },
+        { memcmp: { offset: KEY_OFFSET, bytes: key } },
+      ],
+    })
+
+  return {
+    async countWorks(owner) {
+      const domains = await addresses('Domain', owner)
+      const works = await Promise.all(
+        domains.map(({ pubkey }) => addresses('Work', pubkey.toBase58())),
+      )
+      return works.reduce((sum, list) => sum + list.length, 0)
+    },
   }
 }

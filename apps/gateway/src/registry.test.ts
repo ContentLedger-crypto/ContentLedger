@@ -7,10 +7,15 @@ import {
   vaultPda,
   workPda,
 } from '@contentledger/chain'
-import { BN } from '@coral-xyz/anchor'
-import { type AccountInfo, type Commitment, PublicKey } from '@solana/web3.js'
+import { BN, utils } from '@coral-xyz/anchor'
+import {
+  type AccountInfo,
+  type Commitment,
+  type GetProgramAccountsConfig,
+  PublicKey,
+} from '@solana/web3.js'
 import { describe, expect, it } from 'vitest'
-import { rpcRegistry } from './registry.js'
+import { rpcOwnedWorks, rpcRegistry } from './registry.js'
 
 const SOURCE = 'https://acme-news.test/2026/ai-act-explained.html'
 const key = (seed: number) => new PublicKey(new Uint8Array(32).fill(seed))
@@ -194,5 +199,115 @@ describe('rpcRegistry.readWithEscrow', () => {
   it('fails loudly on an escrow without its vault, which the program never leaves behind', async () => {
     const rpc = connection([...(await registry()), account(await escrowData()), null])
     await expect(rpcRegistry(rpc).readWithEscrow(SOURCE, ESCROW)).rejects.toThrow(/vault/)
+  })
+})
+
+describe('rpcOwnedWorks', () => {
+  const ALICE = key(41)
+  const BOB = key(42)
+
+  const domainOf = (owner: PublicKey, payoutOwner: PublicKey, host: string) =>
+    coder.accounts.encode('Domain', {
+      owner,
+      payout_owner: payoutOwner,
+      host,
+      rate_train: new BN(2000),
+      rate_inference: new BN(500),
+      status: { Active: {} },
+      bump: 254,
+      reserved: Array(32).fill(0),
+    })
+
+  const workOf = (host: string, seed: number) =>
+    coder.accounts.encode('Work', {
+      domain: domainPda(host)[0],
+      source_hash: Array(32).fill(seed),
+      content_hash: Array(32).fill(0x22),
+      rate_train: null,
+      rate_inference: null,
+      status: { Suspended: {} },
+      attested_by: 0,
+      bump: 253,
+      reserved: Array(32).fill(0),
+    })
+
+  // Applies the filters the way the cluster does, so a wrong offset or a missing
+  // discriminator shows up as a wrong count rather than passing on a canned answer.
+  function cluster(accounts: Array<{ pubkey: PublicKey; data: Buffer }>) {
+    const calls: GetProgramAccountsConfig[] = []
+    return {
+      calls,
+      getProgramAccounts: async (programId: PublicKey, config: GetProgramAccountsConfig) => {
+        calls.push(config)
+        expect(programId.equals(PROGRAM_ID)).toBe(true)
+        return accounts
+          .filter(({ data }) =>
+            (config.filters ?? []).every((filter) => {
+              if (!('memcmp' in filter)) return false
+              const bytes = utils.bytes.bs58.decode(filter.memcmp.bytes)
+              const at = filter.memcmp.offset
+              return data.subarray(at, at + bytes.length).equals(Buffer.from(bytes))
+            }),
+          )
+          .map(({ pubkey, data }) => ({ pubkey, account: account(data.subarray(0, 0)) }))
+      },
+    }
+  }
+
+  async function registry() {
+    return [
+      { pubkey: domainPda('alice.test')[0], data: await domainOf(ALICE, ALICE, 'alice.test') },
+      { pubkey: domainPda('alice.org')[0], data: await domainOf(ALICE, BOB, 'alice.org') },
+      // Bob registered with Alice as payout: she does not own it, so its works are not hers.
+      { pubkey: domainPda('bob.test')[0], data: await domainOf(BOB, ALICE, 'bob.test') },
+      { pubkey: key(51), data: await workOf('alice.test', 1) },
+      { pubkey: key(52), data: await workOf('alice.test', 2) },
+      { pubkey: key(53), data: await workOf('alice.org', 3) },
+      { pubkey: key(54), data: await workOf('bob.test', 4) },
+      // An escrow whose consumer is Alice puts her key at the same offset as Domain.owner.
+      {
+        pubkey: key(55),
+        data: await coder.accounts.encode('Escrow', {
+          consumer: ALICE,
+          vault: key(6),
+          settled_total: new BN(0),
+          last_seq: new BN(0),
+          last_chain: Array(32).fill(0),
+          withdraw_after: new BN(0),
+          bump: 252,
+          vault_bump: 251,
+          reserved: Array(32).fill(0),
+        }),
+      },
+    ]
+  }
+
+  it('counts the works under every domain the wallet owns, whatever their status', async () => {
+    const rpc = cluster(await registry())
+    expect(await rpcOwnedWorks(rpc).countWorks(ALICE.toBase58())).toBe(3)
+    expect(await rpcOwnedWorks(rpc).countWorks(BOB.toBase58())).toBe(1)
+  })
+
+  it('counts zero for a wallet with no domain', async () => {
+    const rpc = cluster(await registry())
+    expect(await rpcOwnedWorks(rpc).countWorks(key(43).toBase58())).toBe(0)
+  })
+
+  it('reads confirmed state and asks for addresses only', async () => {
+    const rpc = cluster(await registry())
+    await rpcOwnedWorks(rpc).countWorks(ALICE.toBase58())
+    expect(rpc.calls).toHaveLength(3)
+    for (const call of rpc.calls) {
+      expect(call).toMatchObject({ commitment: 'confirmed', dataSlice: { offset: 0, length: 0 } })
+    }
+  })
+
+  it('fails when the cluster does', async () => {
+    const rpc = {
+      getProgramAccounts: async () => {
+        throw new Error('429 Too Many Requests')
+      },
+    }
+    await expect(rpcOwnedWorks(rpc).countWorks(ALICE.toBase58())).rejects.toThrow('429')
   })
 })

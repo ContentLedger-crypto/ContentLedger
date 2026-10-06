@@ -17,4 +17,4 @@ export function createApp(...routes: Hono[]): Hono {
   return app
 }
 
-const redactKeys = (text: string): string => text.replace(/(api-key=)[^&\s"']+/gi, '$1***')
+export const redactKeys = (text: string): string => text.replace(/(api-key=)[^&\s"']+/gi, '$1***')
