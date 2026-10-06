@@ -56,6 +56,7 @@ const receiptFields = {
   consumer: receipts.consumer,
   useType: receipts.useType,
   tariff: receipts.tariff,
+  paymentMethod: receipts.paymentMethod,
   acceptedAt: receipts.acceptedAt,
   settledAt: receipts.settledAt,
 }

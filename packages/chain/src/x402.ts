@@ -39,6 +39,8 @@ const rpcInstruction = z.object({ programId: z.string(), parsed: z.unknown().opt
  * Fields a newer version adds pass through untouched.
  */
 export const x402TransactionSchema = z.object({
+  /** Unix seconds; `null` when the node has no estimate for the block. */
+  blockTime: z.number().int().nullable(),
   meta: z
     .object({
       err: z.unknown(),
@@ -74,7 +76,9 @@ export type X402Rejection =
   | 'leg_mismatch'
   | 'proof_invalid'
 
-export type X402Verdict = { ok: true; payer: string } | { ok: false; reason: X402Rejection }
+export type X402Verdict =
+  | { ok: true; payer: string; paidAt: Date | null }
+  | { ok: false; reason: X402Rejection }
 
 /**
  * A transaction signature is public the moment it lands, so presenting it proves
@@ -124,7 +128,8 @@ export function verifyX402Payment(
   }
 
   if (!proofHolds(expected, payer)) return { ok: false, reason: 'proof_invalid' }
-  return { ok: true, payer }
+  const paidAt = tx.blockTime === null ? null : new Date(tx.blockTime * 1000)
+  return { ok: true, payer, paidAt }
 }
 
 function expectedLegs(legs: readonly X402Leg[]): Map<string, bigint> {

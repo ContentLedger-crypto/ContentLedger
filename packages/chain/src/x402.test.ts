@@ -25,6 +25,7 @@ const treasuryAta = new PublicKey(new Uint8Array(32).fill(3)).toBase58()
 const otherAta = new PublicKey(new Uint8Array(32).fill(4)).toBase58()
 
 const signature = utils.bytes.bs58.encode(new Uint8Array(64).fill(5))
+const paidAt = new Date(1_790_000_000_000)
 const legs = [
   { destination: publisherAta, amount: 2000n },
   { destination: treasuryAta, amount: 200n },
@@ -68,11 +69,15 @@ function transferChecked(destination: string, amount: bigint): Ix {
 // Shaped like the wire answer and parsed through the schema, as the gateway reads it.
 function paymentTx(
   instructions: Ix[],
-  options: { err?: { InstructionError: [number, string] }; inner?: Ix[] } = {},
+  options: {
+    err?: { InstructionError: [number, string] }
+    inner?: Ix[]
+    blockTime?: number | null
+  } = {},
 ): X402Transaction {
   return x402TransactionSchema.parse({
     slot: 412_000_000,
-    blockTime: 1_790_000_000,
+    blockTime: options.blockTime === undefined ? 1_790_000_000 : options.blockTime,
     version: 0,
     meta: {
       err: options.err ?? null,
@@ -111,7 +116,7 @@ describe('x402ProofMessage', () => {
 describe('verifyX402Payment', () => {
   it('accepts a transaction paying every leg exactly and names the payer', () => {
     const tx = paymentTx([transfer(publisherAta, 2000n), transfer(treasuryAta, 200n)])
-    expect(verifyX402Payment(tx, expect402())).toEqual({ ok: true, payer })
+    expect(verifyX402Payment(tx, expect402())).toEqual({ ok: true, payer, paidAt })
   })
 
   it('accepts transferChecked and ignores unrelated instructions in the same transaction', () => {
@@ -122,7 +127,14 @@ describe('verifyX402Payment', () => {
       transfer(otherAta, 999n),
       transferChecked(treasuryAta, 200n),
     ])
-    expect(verifyX402Payment(tx, expect402())).toEqual({ ok: true, payer })
+    expect(verifyX402Payment(tx, expect402())).toEqual({ ok: true, payer, paidAt })
+  })
+
+  it('reports no payment time when the node has no estimate for the block', () => {
+    const tx = paymentTx([transfer(publisherAta, 2000n), transfer(treasuryAta, 200n)], {
+      blockTime: null,
+    })
+    expect(verifyX402Payment(tx, expect402())).toEqual({ ok: true, payer, paidAt: null })
   })
 
   it('counts transfers made through CPI', () => {
@@ -130,7 +142,7 @@ describe('verifyX402Payment', () => {
     const tx = paymentTx([cpi], {
       inner: [transfer(publisherAta, 2000n), transfer(treasuryAta, 200n)],
     })
-    expect(verifyX402Payment(tx, expect402())).toEqual({ ok: true, payer })
+    expect(verifyX402Payment(tx, expect402())).toEqual({ ok: true, payer, paidAt })
   })
 
   it('sums split transfers to one leg', () => {
@@ -139,7 +151,7 @@ describe('verifyX402Payment', () => {
       transfer(publisherAta, 500n),
       transfer(treasuryAta, 200n),
     ])
-    expect(verifyX402Payment(tx, expect402())).toEqual({ ok: true, payer })
+    expect(verifyX402Payment(tx, expect402())).toEqual({ ok: true, payer, paidAt })
   })
 
   it('accepts a zero leg only when nothing was sent to it', () => {
@@ -151,6 +163,7 @@ describe('verifyX402Payment', () => {
     expect(verifyX402Payment(clean, { signature, legs: free, proof: proofBy(payerSeed) })).toEqual({
       ok: true,
       payer,
+      paidAt,
     })
     const stray = paymentTx([transfer(publisherAta, 1n), transfer(treasuryAta, 200n)])
     expect(verifyX402Payment(stray, { signature, legs: free, proof: proofBy(payerSeed) })).toEqual({
@@ -289,6 +302,7 @@ describe('x402TransactionSchema', () => {
   it('reads a real version 1 answer down to its CPI transfers', () => {
     const tx = x402TransactionSchema.parse(mainnetV1)
     expect(mainnetV1.version).toBe(1)
+    expect(tx.blockTime).toBe(1_790_936_668)
     // Legs and payer match; only the proof is missing, since nobody here holds that key.
     const verdict = verifyX402Payment(tx, {
       signature: swapSignature,

@@ -5,16 +5,18 @@ import {
   CONSUMER_TOTALS,
   dataModeOf,
   EDGES,
-  receipts,
-  subscribeReceipts,
+  type FeedEvent,
+  publisherApiFor,
+  sampleFeed,
   summary,
 } from './api'
 
 const sum = (amounts: readonly bigint[]) => amounts.reduce((total, amount) => total + amount, 0n)
 
 describe('served data', () => {
-  it('arrives through the shared contract, money as bigint', () => {
-    expect(typeof receipts.items[0]?.tariff).toBe('bigint')
+  it('arrives through the shared contract, money as bigint', async () => {
+    const page = await sampleFeed.receipts(null, new AbortController().signal)
+    expect(typeof page.items[0]?.tariff).toBe('bigint')
     expect(summary.total).toBe(4_246_900n)
   })
 
@@ -36,7 +38,7 @@ describe('served data', () => {
   })
 })
 
-describe('subscribeReceipts', () => {
+describe('sampleFeed.stream', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -44,28 +46,133 @@ describe('subscribeReceipts', () => {
     vi.useRealTimers()
   })
 
-  it('delivers arrivals one at a time through the contract, then falls silent', () => {
-    const seen: bigint[] = []
-    subscribeReceipts((receipt) => seen.push(receipt.tariff))
+  it('is ready at once, delivers arrivals one at a time, then falls silent', () => {
+    const seen: string[] = []
+    void sampleFeed.stream(
+      (event) => seen.push(event.type === 'receipt' ? event.receipt.tariff.toString() : event.type),
+      new AbortController().signal,
+    )
+    expect(seen).toEqual(['ready'])
 
     vi.advanceTimersByTime(3999)
-    expect(seen).toEqual([])
+    expect(seen).toEqual(['ready'])
     vi.advanceTimersByTime(1)
-    expect(seen).toEqual([905n])
+    expect(seen).toEqual(['ready', '905'])
 
     vi.runAllTimers()
-    expect(seen).toHaveLength(6)
+    expect(seen).toHaveLength(7)
     vi.advanceTimersByTime(60_000)
-    expect(seen).toHaveLength(6)
+    expect(seen).toHaveLength(7)
   })
 
-  it('stops delivering once unsubscribed', () => {
-    const seen: string[] = []
-    const unsubscribe = subscribeReceipts((receipt) => seen.push(receipt.id))
+  it('stops delivering once aborted, and ends with the abort', async () => {
+    const seen: FeedEvent[] = []
+    const controller = new AbortController()
+    const ended = sampleFeed.stream((event) => seen.push(event), controller.signal)
     vi.advanceTimersByTime(4000)
-    unsubscribe()
+    controller.abort()
     vi.runAllTimers()
-    expect(seen).toHaveLength(1)
+    expect(seen).toHaveLength(2)
+    await expect(ended).rejects.toThrow()
+  })
+})
+
+describe('publisherApiFor', () => {
+  const wireReceipt = {
+    id: 'bd4fc50240c281804fab6e470b98483e4b1c6d73e228c13474a81485128e127b',
+    workId: 'BUHqsiLM6HyUEKrdVAtWQ1KG9K9oKJJAJXjUv3fFmHLp',
+    sourceId: 'https://atlasquarterly.org/2026/03/tide-gauges',
+    consumer: 'Kzb7q9Np5Zr9QBo7iafi2yCBisiHJg7r7HezzgvbuQ2T',
+    useType: 'inference',
+    tariff: '905',
+    paymentMethod: 'x402',
+    acceptedAt: '2026-10-07T10:00:02.000Z',
+    settledAt: '2026-10-07T10:00:00.000Z',
+  }
+  const signal = new AbortController().signal
+
+  const sse = (text: string, status = 200) =>
+    new Response(new TextEncoder().encode(text), {
+      status,
+      headers: { 'Content-Type': 'text/event-stream' },
+    })
+
+  it('reads a page with the session token, passing the cursor it was handed', async () => {
+    const fetcher = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ items: [wireReceipt], nextCursor: null })),
+    )
+    const api = publisherApiFor('https://gw.example', 'tok', fetcher)
+
+    const page = await api.receipts('2026-10-07T10:00:02.000Z_ab+c', signal)
+    expect(page.items[0]?.tariff).toBe(905n)
+    const [url, init] = fetcher.mock.calls[0] ?? []
+    expect(url).toBe(
+      'https://gw.example/v1/publisher/receipts?cursor=2026-10-07T10%3A00%3A02.000Z_ab%2Bc',
+    )
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer tok')
+    expect(init?.signal).toBe(signal)
+  })
+
+  it('asks for the first page without a cursor', async () => {
+    const fetcher = vi.fn<typeof fetch>(
+      async () => new Response(JSON.stringify({ items: [], nextCursor: null })),
+    )
+    await publisherApiFor('', 'tok', fetcher).receipts(null, signal)
+    expect(fetcher.mock.calls[0]?.[0]).toBe('/v1/publisher/receipts')
+  })
+
+  it('carries a refused session as a 401', async () => {
+    const api = publisherApiFor(
+      '',
+      'tok',
+      async () =>
+        new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'x' } }), {
+          status: 401,
+        }),
+    )
+    await expect(api.receipts(null, signal)).rejects.toEqual(
+      new ApiError(401, 'UNAUTHORIZED', null),
+    )
+    await expect(api.stream(() => {}, signal)).rejects.toEqual(
+      new ApiError(401, 'UNAUTHORIZED', null),
+    )
+  })
+
+  it('turns the stream into events through the shared contract, skipping unknown ones', async () => {
+    const settlement = {
+      batchId: 'a'.repeat(64),
+      settledAt: '2026-10-07T10:05:00.000Z',
+      receiptIds: [wireReceipt.id],
+    }
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      sse(
+        [
+          'event: ready\ndata: {}\n\n',
+          ': ping\n\n',
+          `event: receipt\ndata: ${JSON.stringify(wireReceipt)}\n\n`,
+          'event: later\ndata: {}\n\n',
+          `event: settlement\ndata: ${JSON.stringify(settlement)}\n\n`,
+          'event: resync\ndata: {}\n\n',
+        ].join(''),
+      ),
+    )
+    const events: FeedEvent[] = []
+
+    await publisherApiFor('', 'tok', fetcher).stream((event) => events.push(event), signal)
+
+    expect(events.map((event) => event.type)).toEqual(['ready', 'receipt', 'settlement', 'resync'])
+    expect(events[1]).toMatchObject({ receipt: { tariff: 905n, paymentMethod: 'x402' } })
+    expect(events[2]).toEqual({ type: 'settlement', settlement })
+    const [url, init] = fetcher.mock.calls[0] ?? []
+    expect(url).toBe('/v1/publisher/stream')
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer tok')
+  })
+
+  it('ends with an error when an event breaks the contract', async () => {
+    const api = publisherApiFor('', 'tok', async () =>
+      sse('event: receipt\ndata: {"id":"short"}\n\n'),
+    )
+    await expect(api.stream(() => {}, signal)).rejects.toThrow()
   })
 })
 

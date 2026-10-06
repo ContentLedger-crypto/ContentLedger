@@ -25,9 +25,16 @@ export function shareOf(part: bigint, whole: bigint): string | null {
   return `${basisPoints / 100n}.${(basisPoints % 100n).toString().padStart(2, '0')}%`
 }
 
-/** The gateway serves instants in one fixed ISO form, so the clock time sits at a fixed offset. */
-export function timeOfDay(instant: string): string {
-  return instant.slice(11, 19)
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * UTC clock time for an instant on `today` (`YYYY-MM-DD`), with the day for anything earlier.
+ * The gateway serves instants in one fixed ISO form, so each part sits at a fixed offset.
+ */
+export function clockLabel(instant: string, today: string): string {
+  const time = instant.slice(11, 19)
+  if (instant.slice(0, 10) === today) return time
+  return `${Number(instant.slice(8, 10))} ${MONTHS[Number(instant.slice(5, 7)) - 1]} ${time.slice(0, 5)}`
 }
 
 export function workPath(sourceId: string): string {

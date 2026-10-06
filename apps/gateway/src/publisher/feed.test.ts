@@ -141,6 +141,7 @@ describe('publisherFeed', () => {
         consumer: AGENT,
         useType: 'train',
         tariff: 2n ** 60n,
+        paymentMethod: 'escrow',
         acceptedAt: '2026-10-07T08:01:00.000Z',
         settledAt: null,
       },

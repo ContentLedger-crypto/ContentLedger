@@ -19,7 +19,7 @@ export function Nav({
   onNavigate: (view: ViewName) => void
   wallet: string
   /** Says what the figures below are while they are not this wallet's own. */
-  notice: string
+  notice: string | null
   onSignOut?: () => void
 }) {
   return (
@@ -69,9 +69,11 @@ export function Nav({
           )}
         </div>
       </div>
-      <p className="serif pb-2" style={{ color: COLOR.muted, fontSize: 14 }}>
-        {notice}
-      </p>
+      {notice !== null && (
+        <p className="serif pb-2" style={{ color: COLOR.muted, fontSize: 14 }}>
+          {notice}
+        </p>
+      )}
     </Column>
   )
 }

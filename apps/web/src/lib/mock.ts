@@ -61,11 +61,17 @@ const receipt = (
   consumer: AGENT[agent],
   useType,
   tariff,
+  paymentMethod: 'escrow',
   acceptedAt: `2026-09-03T${time}.000Z`,
   settledAt: settled ? SETTLED_AT : null,
 })
 
-/* Per-request (x402) payments are never batched, so they carry no `settledAt`. */
+/** Paid per request (x402): never batched, settled by its own payment, just before it was served. */
+const paidDirect = (escrow: WireReceipt): WireReceipt => ({
+  ...escrow,
+  paymentMethod: 'x402',
+  settledAt: escrow.acceptedAt,
+})
 
 export const RECEIPTS: z.input<typeof receiptsPageSchema> = {
   items: [
@@ -96,14 +102,16 @@ export const RECEIPTS: z.input<typeof receiptsPageSchema> = {
       '500',
       false,
     ),
-    receipt(
-      'f02e88eed9cd67e320b99f268b7089303bb753dc1280f85437d462b871f38d84',
-      '14:51:44',
-      'pallas',
-      'logs1974',
-      'inference',
-      '500',
-      false,
+    paidDirect(
+      receipt(
+        'f02e88eed9cd67e320b99f268b7089303bb753dc1280f85437d462b871f38d84',
+        '14:51:44',
+        'pallas',
+        'logs1974',
+        'inference',
+        '500',
+        false,
+      ),
     ),
     receipt(
       '55ddff20e51b0d1b1ee16414d54a064e4ee3e19424535b24af7c566df60b2454',
@@ -210,14 +218,16 @@ export const INCOMING: readonly WireReceipt[] = [
     '6000',
     false,
   ),
-  receipt(
-    'aa3719e085eebdfcd90d0b50399425fa01bc336cf2264104ce6118fadec3cdd3',
-    '14:52:27',
-    'pallas',
-    'logs1974',
-    'inference',
-    '500',
-    false,
+  paidDirect(
+    receipt(
+      'aa3719e085eebdfcd90d0b50399425fa01bc336cf2264104ce6118fadec3cdd3',
+      '14:52:27',
+      'pallas',
+      'logs1974',
+      'inference',
+      '500',
+      false,
+    ),
   ),
   receipt(
     '57ffc1a93987b8537ba56678f3f94064619cfed31f0b80ab2dfc1d0dc2540c7d',

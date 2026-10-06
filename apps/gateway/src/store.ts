@@ -52,7 +52,7 @@ export function recordEscrowIssuance(
   voucher: PresentedVoucher,
   mirror: RegistryMirror,
 ): Promise<IssuanceOutcome> {
-  return issue(db, body, mirror, (tx, id) =>
+  return issue(db, body, mirror, null, (tx, id) =>
     tx.insert(vouchers).values({
       consumer: body.consumer,
       seq: voucher.seq,
@@ -64,12 +64,14 @@ export function recordEscrowIssuance(
   )
 }
 
+/** An x402 receipt is settled from the start: its money moved before the content did. */
 export function recordX402Issuance(
   db: Database,
   body: X402ReceiptBody,
+  paidAt: Date,
   mirror: RegistryMirror,
 ): Promise<IssuanceOutcome> {
-  return issue(db, body, mirror, async () => {})
+  return issue(db, body, mirror, paidAt, async () => {})
 }
 
 /**
@@ -82,6 +84,7 @@ async function issue(
   db: Database,
   body: ReceiptBody,
   mirror: RegistryMirror,
+  settledAt: Date | null,
   after: (tx: Transaction, receiptId: string) => Promise<unknown>,
 ): Promise<IssuanceOutcome> {
   const id = receiptId(body)
@@ -102,6 +105,7 @@ async function issue(
         paymentMethod: body.paymentMethod,
         paymentRef: body.paymentMethod === 'x402' ? body.paymentRef : null,
         ...acceptedAtColumns(body.acceptedAt),
+        settledAt,
       })
       await after(tx, id)
     })

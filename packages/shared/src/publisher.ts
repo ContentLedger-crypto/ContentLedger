@@ -11,7 +11,9 @@ export const publisherReceiptSchema = z.object({
   consumer: base58KeySchema,
   useType: useTypeSchema,
   tariff: usdcAmountSchema,
+  paymentMethod: z.enum(['escrow', 'x402']),
   acceptedAt: utcInstantSchema,
+  /** When the money moved: the batch for escrow, the payment itself for x402. */
   settledAt: utcInstantSchema.nullable(),
 })
 

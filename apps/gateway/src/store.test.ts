@@ -263,20 +263,32 @@ describe('recordEscrowIssuance', () => {
 })
 
 describe('recordX402Issuance', () => {
-  it('writes the receipt anchored to the payment transaction, without a voucher', async () => {
+  it('writes the receipt anchored to the payment transaction and settled when it was paid', async () => {
     const body = x402Body('2026-09-30T10:00:00.000Z')
-    expect(await recordX402Issuance(db, body, mirror(10n))).toEqual({
+    const paidAt = new Date('2026-09-30T09:59:58.000Z')
+    expect(await recordX402Issuance(db, body, paidAt, mirror(10n))).toEqual({
       ok: true,
       receiptId: receiptId(body),
     })
     const [receipt] = await db.select().from(receipts)
-    expect(receipt).toMatchObject({ paymentMethod: 'x402', paymentRef: PAYMENT_REF })
+    expect(receipt).toMatchObject({
+      paymentMethod: 'x402',
+      paymentRef: PAYMENT_REF,
+      settledAt: paidAt,
+      batchId: null,
+    })
     expect(await db.select().from(vouchers)).toHaveLength(0)
   })
 
   it('refuses the same payment for a second issuance, even with a different body', async () => {
-    await recordX402Issuance(db, x402Body('2026-09-30T10:00:00.000Z'), mirror(10n))
-    const again = await recordX402Issuance(db, x402Body('2026-09-30T10:00:05.000Z'), mirror(10n))
+    const paidAt = new Date('2026-09-30T09:59:58.000Z')
+    await recordX402Issuance(db, x402Body('2026-09-30T10:00:00.000Z'), paidAt, mirror(10n))
+    const again = await recordX402Issuance(
+      db,
+      x402Body('2026-09-30T10:00:05.000Z'),
+      paidAt,
+      mirror(10n),
+    )
     expect(again).toEqual({ ok: false, reason: 'replayed' })
     expect(await db.select().from(receipts)).toHaveLength(1)
   })

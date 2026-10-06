@@ -240,6 +240,7 @@ describe('GET /v1/publisher/stream', () => {
         consumer: AGENT,
         useType: 'inference',
         tariff: '500',
+        paymentMethod: 'escrow',
         acceptedAt: '2026-10-07T08:01:00.000Z',
         settledAt: null,
       },

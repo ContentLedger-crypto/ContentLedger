@@ -111,6 +111,7 @@ function fakeRail(): FakeRail {
       if (fake.landing === 'crash') throw new Error('process died mid-payment')
       if (fake.landing !== 'landed') return fake.landing
       landed.set(signature, {
+        blockTime: Math.floor(Date.now() / 1000),
         meta: { err: null, innerInstructions: [] },
         transaction: {
           signatures: [signature],

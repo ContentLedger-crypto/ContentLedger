@@ -524,11 +524,12 @@ const PUBLISHER_ATA = associatedTokenAddress(
 /** Lands a transfer of each leg on the fake chain and returns the request headers for it. */
 function payX402(
   legs: Array<[destination: string, amount: bigint]>,
-  options: { payer?: Keypair; prover?: Keypair } = {},
+  options: { payer?: Keypair; prover?: Keypair; blockTime?: number | null } = {},
 ) {
   const payer = options.payer ?? agent
   const signature = utils.bytes.bs58.encode(Keypair.generate().secretKey)
   world.ledger.set(signature, {
+    blockTime: options.blockTime === undefined ? world.now / 1000 - 2 : options.blockTime,
     meta: { err: null, innerInstructions: [] },
     transaction: {
       signatures: [signature],
@@ -589,10 +590,30 @@ describe('GET /v1/content with an x402 payment', () => {
     expect(issued).toEqual([receiptId(body)])
 
     expect(await db.select().from(receipts)).toMatchObject([
-      { paymentMethod: 'x402', paymentRef: signature, tariff: 2000n, settledAt: null },
+      {
+        paymentMethod: 'x402',
+        paymentRef: signature,
+        tariff: 2000n,
+        settledAt: new Date('2026-09-30T09:59:58.000Z'),
+        batchId: null,
+      },
     ])
     expect(await db.select().from(vouchers)).toHaveLength(0)
     expect(await db.select().from(works)).toMatchObject([{ byteLen: CONTENT.length }])
+  })
+
+  it.each([
+    ['has no block time', null],
+    [
+      'estimates the block later than the payment was accepted',
+      Date.parse('2026-09-30T10:00:01Z') / 1000,
+    ],
+  ])('dates the payment at acceptance when the node %s', async (_, blockTime) => {
+    const { headers } = payX402(fullPrice(), { blockTime })
+    expect((await request(headers)).status).toBe(200)
+    expect(await db.select().from(receipts)).toMatchObject([
+      { settledAt: new Date('2026-09-30T10:00:00.000Z') },
+    ])
   })
 
   it('needs no escrow and no consumer header', async () => {

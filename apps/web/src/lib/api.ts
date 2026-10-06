@@ -3,12 +3,16 @@ import {
   type PublisherReceipt,
   publisherReceiptSchema,
   publisherSummarySchema,
+  type ReceiptsPage,
   receiptsPageSchema,
+  type SettlementEvent,
   sessionGrantSchema,
+  settlementEventSchema,
 } from '@contentledger/shared'
 import { z } from 'zod'
 import type { AuthApi } from '@/auth/session'
 import { INCOMING, INCOMING_INTERVAL_MS, RECEIPTS, SESSION_WALLET, SUMMARY } from './mock'
+import { sseMessages } from './sse'
 
 /**
  * The one module the dashboard reads data from. What the gateway serves passes through
@@ -66,28 +70,28 @@ const refusalSchema = z.object({
   }),
 })
 
-export function authApiFor(
-  apiUrl: string,
-  fetcher: typeof fetch = (input, init) => fetch(input, init),
-): AuthApi {
+async function refusalOf(response: Response): Promise<ApiError> {
+  const refusal = refusalSchema.safeParse(await response.json().catch(() => null))
+  return refusal.success
+    ? new ApiError(
+        response.status,
+        refusal.data.error.code,
+        refusal.data.error.details?.retryAfter ?? null,
+      )
+    : new ApiError(response.status, null, null)
+}
+
+const defaultFetch: typeof fetch = (input, init) => fetch(input, init)
+
+export function authApiFor(apiUrl: string, fetcher: typeof fetch = defaultFetch): AuthApi {
   async function post<S extends z.ZodType>(schema: S, path: string, body: unknown) {
     const response = await fetcher(`${apiUrl}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    const json: unknown = await response.json().catch(() => null)
-    if (!response.ok) {
-      const refusal = refusalSchema.safeParse(json)
-      throw refusal.success
-        ? new ApiError(
-            response.status,
-            refusal.data.error.code,
-            refusal.data.error.details?.retryAfter ?? null,
-          )
-        : new ApiError(response.status, null, null)
-    }
-    return schema.parse(json) as z.output<S>
+    if (!response.ok) throw await refusalOf(response)
+    return schema.parse(await response.json()) as z.output<S>
   }
 
   return {
@@ -101,21 +105,90 @@ export const authApi = dataMode.kind === 'gateway' ? authApiFor(dataMode.apiUrl)
 /** The sample publisher: the preview shows it, a signed-in dashboard shows its session. */
 export const sampleWallet = SESSION_WALLET
 
-export const receipts = receiptsPageSchema.parse(RECEIPTS)
+export type FeedEvent =
+  | { readonly type: 'ready' }
+  | { readonly type: 'receipt'; readonly receipt: PublisherReceipt }
+  | { readonly type: 'settlement'; readonly settlement: SettlementEvent }
+  | { readonly type: 'resync' }
 
-export const summary = publisherSummarySchema.parse(SUMMARY)
+/** What the takings feed reads: pages of receipts, and the stream of what changes them. */
+export interface FeedSource {
+  receipts(cursor: string | null, signal: AbortSignal): Promise<ReceiptsPage>
+  /** Settles when the stream ends: resolves if the gateway closed it, rejects otherwise. */
+  stream(onEvent: (event: FeedEvent) => void, signal: AbortSignal): Promise<void>
+}
 
-export function subscribeReceipts(onReceipt: (receipt: PublisherReceipt) => void): () => void {
-  const timers = INCOMING.map((wire, index) =>
-    setTimeout(
-      () => onReceipt(publisherReceiptSchema.parse(wire)),
-      INCOMING_INTERVAL_MS * (index + 1),
-    ),
-  )
-  return () => {
-    for (const timer of timers) clearTimeout(timer)
+export function publisherApiFor(
+  apiUrl: string,
+  token: string,
+  fetcher: typeof fetch = defaultFetch,
+): FeedSource {
+  const authorization = { Authorization: `Bearer ${token}` }
+
+  return {
+    async receipts(cursor, signal) {
+      const query = cursor === null ? '' : `?${new URLSearchParams({ cursor })}`
+      const response = await fetcher(`${apiUrl}/v1/publisher/receipts${query}`, {
+        headers: authorization,
+        signal,
+      })
+      if (!response.ok) throw await refusalOf(response)
+      return receiptsPageSchema.parse(await response.json())
+    },
+
+    async stream(onEvent, signal) {
+      const response = await fetcher(`${apiUrl}/v1/publisher/stream`, {
+        headers: { ...authorization, Accept: 'text/event-stream' },
+        signal,
+      })
+      if (!response.ok) throw await refusalOf(response)
+      if (response.body === null) throw new Error('the stream answered without a body')
+      for await (const message of sseMessages(response.body)) {
+        const event = feedEventOf(message.event, message.data)
+        if (event !== null) onEvent(event)
+      }
+    },
   }
 }
+
+// An event this dashboard does not know yet is skipped, so the gateway can add one first.
+function feedEventOf(name: string, data: string): FeedEvent | null {
+  switch (name) {
+    case 'ready':
+      return { type: 'ready' }
+    case 'resync':
+      return { type: 'resync' }
+    case 'receipt':
+      return { type: 'receipt', receipt: publisherReceiptSchema.parse(JSON.parse(data)) }
+    case 'settlement':
+      return { type: 'settlement', settlement: settlementEventSchema.parse(JSON.parse(data)) }
+    default:
+      return null
+  }
+}
+
+/** The preview's feed: one page, then six arrivals four seconds apart, then silence. */
+export const sampleFeed: FeedSource = {
+  receipts: async () => receiptsPageSchema.parse(RECEIPTS),
+  stream: (onEvent, signal) =>
+    new Promise((_, reject) => {
+      onEvent({ type: 'ready' })
+      const timers = INCOMING.map((wire, index) =>
+        setTimeout(
+          () => onEvent({ type: 'receipt', receipt: publisherReceiptSchema.parse(wire) }),
+          INCOMING_INTERVAL_MS * (index + 1),
+        ),
+      )
+      const stop = () => {
+        for (const timer of timers) clearTimeout(timer)
+        reject(signal.reason)
+      }
+      if (signal.aborted) stop()
+      else signal.addEventListener('abort', stop, { once: true })
+    }),
+}
+
+export const summary = publisherSummarySchema.parse(SUMMARY)
 
 export {
   CONSUMER_TOTALS,

@@ -310,7 +310,7 @@ describe('GET /v1/receipts/:id', () => {
     const paymentRef = utils.bytes.bs58.encode(new Uint8Array(64).fill(0x5a))
     const { seq: _seq, ...issued } = escrowBody(1)
     const body: X402ReceiptBody = { ...issued, paymentMethod: 'x402', paymentRef }
-    await recordX402Issuance(db, body, mirror)
+    await recordX402Issuance(db, body, new Date(body.acceptedAt), mirror)
 
     const res = await getReceipt(receiptId(body))
     expect(res.status).toBe(200)

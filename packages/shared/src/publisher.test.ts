@@ -13,6 +13,7 @@ const wireReceipt = {
   consumer: 'Kzb7q9Np5Zr9QBo7iafi2yCBisiHJg7r7HezzgvbuQ2T',
   useType: 'inference',
   tariff: '905',
+  paymentMethod: 'escrow',
   acceptedAt: '2026-09-03T14:50:41.000Z',
   settledAt: '2026-09-03T14:51:00.000Z',
 }
@@ -45,6 +46,22 @@ describe('receiptsPageSchema', () => {
     })
     expect(page.items[0]?.settledAt).toBeNull()
     expect(page.nextCursor).toBeNull()
+  })
+
+  it('accepts a receipt paid per request', () => {
+    const page = receiptsPageSchema.parse({
+      items: [{ ...wireReceipt, paymentMethod: 'x402' }],
+      nextCursor: null,
+    })
+    expect(page.items[0]?.paymentMethod).toBe('x402')
+  })
+
+  it('rejects a payment method the ledger does not know', () => {
+    const result = receiptsPageSchema.safeParse({
+      items: [{ ...wireReceipt, paymentMethod: 'card' }],
+      nextCursor: null,
+    })
+    expect(result.success).toBe(false)
   })
 
   it('accepts an empty page', () => {

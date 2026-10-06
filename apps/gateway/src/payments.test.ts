@@ -6,6 +6,7 @@ const SIGNATURE = '5'.repeat(88)
 
 const tx = {
   version: 1,
+  blockTime: 1_790_936_668,
   meta: { err: null, innerInstructions: [] },
   transaction: {
     signatures: [SIGNATURE],
@@ -26,6 +27,7 @@ describe('rpcPayments', () => {
   it('asks for the parsed transaction at confirmed, up to version 1', async () => {
     const { payments, calls } = rpcAnswering({ jsonrpc: '2.0', id: 1, result: tx })
     expect(await payments.transaction(SIGNATURE)).toMatchObject({
+      blockTime: 1_790_936_668,
       transaction: { signatures: [SIGNATURE] },
     })
     expect(calls).toEqual([

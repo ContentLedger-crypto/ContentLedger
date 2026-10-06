@@ -313,9 +313,14 @@ export function contentRoutes(deps: ContentDeps): Hono {
       paymentMethod: 'x402',
       paymentRef: payment.signature,
     }
+    // The transfer is confirmed before it is accepted, so acceptance bounds the payment
+    // time from above; block time is the validators' estimate, and runs up to a second late.
+    const acceptedAt = new Date(body.acceptedAt)
+    const paidAt = paid.paidAt === null || paid.paidAt > acceptedAt ? acceptedAt : paid.paidAt
     const recorded = await recordX402Issuance(
       db,
       body,
+      paidAt,
       mirrorOf(snapshot, source, served.mediaType, served.bytes.length),
     )
     if (!recorded.ok) return paymentRejected(c, recorded.reason)
