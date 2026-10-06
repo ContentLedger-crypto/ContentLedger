@@ -1,9 +1,13 @@
 import {
+  authChallengeSchema,
   type PublisherReceipt,
   publisherReceiptSchema,
   publisherSummarySchema,
   receiptsPageSchema,
+  sessionGrantSchema,
 } from '@contentledger/shared'
+import { z } from 'zod'
+import type { AuthApi } from '@/auth/session'
 import { INCOMING, INCOMING_INTERVAL_MS, RECEIPTS, SESSION_WALLET, SUMMARY } from './mock'
 
 /**
@@ -12,7 +16,90 @@ import { INCOMING, INCOMING_INTERVAL_MS, RECEIPTS, SESSION_WALLET, SUMMARY } fro
  * is re-exported below as it is, until the task that serves it.
  */
 
-export const sessionWallet = SESSION_WALLET
+export type DataMode =
+  | { readonly kind: 'gateway'; readonly apiUrl: string }
+  | { readonly kind: 'preview' }
+
+/**
+ * Development always reads a gateway, through the dev server's `/v1` proxy unless one is
+ * named. A production build that names none is the public preview on Pages, which has no
+ * gateway to sign in to and says so on screen.
+ */
+export function dataModeOf(env: { DEV: boolean; VITE_API_URL?: string | undefined }): DataMode {
+  const url = env.VITE_API_URL?.trim() ?? ''
+  if (url === '') return env.DEV ? { kind: 'gateway', apiUrl: '' } : { kind: 'preview' }
+  if (originOf(url) !== url) {
+    throw new Error(`VITE_API_URL must be an origin (scheme, host, port; no path): ${url}`)
+  }
+  return { kind: 'gateway', apiUrl: url }
+}
+
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}
+
+export const dataMode = dataModeOf(import.meta.env)
+
+export class ApiError extends Error {
+  readonly status: number
+  readonly code: string | null
+  /** Seconds, from a 429's `details.retryAfter`. */
+  readonly retryAfter: number | null
+
+  constructor(status: number, code: string | null, retryAfter: number | null) {
+    super(`gateway answered ${status}${code === null ? '' : ` ${code}`}`)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.retryAfter = retryAfter
+  }
+}
+
+const refusalSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    details: z.object({ retryAfter: z.number().int().positive().optional() }).optional(),
+  }),
+})
+
+export function authApiFor(
+  apiUrl: string,
+  fetcher: typeof fetch = (input, init) => fetch(input, init),
+): AuthApi {
+  async function post<S extends z.ZodType>(schema: S, path: string, body: unknown) {
+    const response = await fetcher(`${apiUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json: unknown = await response.json().catch(() => null)
+    if (!response.ok) {
+      const refusal = refusalSchema.safeParse(json)
+      throw refusal.success
+        ? new ApiError(
+            response.status,
+            refusal.data.error.code,
+            refusal.data.error.details?.retryAfter ?? null,
+          )
+        : new ApiError(response.status, null, null)
+    }
+    return schema.parse(json) as z.output<S>
+  }
+
+  return {
+    challenge: (wallet) => post(authChallengeSchema, '/v1/auth/challenge', { wallet }),
+    verify: (body) => post(sessionGrantSchema, '/v1/auth/verify', body),
+  }
+}
+
+export const authApi = dataMode.kind === 'gateway' ? authApiFor(dataMode.apiUrl) : null
+
+/** The sample publisher: the preview shows it, a signed-in dashboard shows its session. */
+export const sampleWallet = SESSION_WALLET
 
 export const receipts = receiptsPageSchema.parse(RECEIPTS)
 

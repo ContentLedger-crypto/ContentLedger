@@ -1,3 +1,4 @@
+export * from './auth.js'
 export * from './merkle.js'
 export * from './money.js'
 export * from './publisher.js'

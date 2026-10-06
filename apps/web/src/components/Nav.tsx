@@ -1,5 +1,4 @@
 import { Column } from '@/components/Primitives'
-import { sessionWallet } from '@/lib/api'
 import { COLOR } from '@/lib/theme'
 
 export type ViewName = 'ledger' | 'summary' | 'receipt'
@@ -12,9 +11,16 @@ const ITEMS: readonly { readonly id: 'ledger' | 'summary'; readonly label: strin
 export function Nav({
   current,
   onNavigate,
+  wallet,
+  notice,
+  onSignOut,
 }: {
   current: ViewName
   onNavigate: (view: ViewName) => void
+  wallet: string
+  /** Says what the figures below are while they are not this wallet's own. */
+  notice: string
+  onSignOut?: () => void
 }) {
   return (
     <Column>
@@ -41,10 +47,31 @@ export function Nav({
             )
           })}
         </nav>
-        <div className="mono" style={{ color: COLOR.muted }} title={sessionWallet}>
-          {sessionWallet}
+        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+          <div className="mono" style={{ color: COLOR.muted }} title={wallet}>
+            {wallet}
+          </div>
+          {onSignOut && (
+            <button
+              type="button"
+              className="navitem"
+              onClick={onSignOut}
+              style={{
+                color: COLOR.muted,
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+              }}
+            >
+              Sign out
+            </button>
+          )}
         </div>
       </div>
+      <p className="serif pb-2" style={{ color: COLOR.muted, fontSize: 14 }}>
+        {notice}
+      </p>
     </Column>
   )
 }

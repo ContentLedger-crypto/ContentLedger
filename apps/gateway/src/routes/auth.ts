@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { authChallenges, sessions } from '@contentledger/db'
+import type { authChallengeSchema, sessionGrantSchema } from '@contentledger/shared'
 import { utils } from '@coral-xyz/anchor'
 import { ed25519 } from '@noble/curves/ed25519'
 import { PublicKey } from '@solana/web3.js'
@@ -145,7 +146,10 @@ export function authRoutes({ db, now, dashboardOrigin, cluster, limits }: AuthDe
     await db.insert(authChallenges).values({ nonce, wallet: body.data.wallet, expiresAt })
 
     const input = inputFor(body.data.wallet, nonce, expiresAt)
-    return c.json({ input, message: signInMessage(input) })
+    return c.json({
+      input,
+      message: signInMessage(input),
+    } satisfies z.input<typeof authChallengeSchema>)
   })
 
   app.post('/v1/auth/verify', async (c) => {
@@ -192,7 +196,10 @@ export function authRoutes({ db, now, dashboardOrigin, cluster, limits }: AuthDe
     })
     if (!issued) return denied(c)
 
-    return c.json({ token, expiresAt: expiresAt.toISOString() })
+    return c.json({
+      token,
+      expiresAt: expiresAt.toISOString(),
+    } satisfies z.input<typeof sessionGrantSchema>)
   })
 
   return app

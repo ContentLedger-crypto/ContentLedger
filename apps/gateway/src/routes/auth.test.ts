@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { authChallenges, MIGRATIONS_DIR, sessions } from '@contentledger/db'
+import { type AuthChallenge, authChallengeSchema, sessionGrantSchema } from '@contentledger/shared'
 import { utils } from '@coral-xyz/anchor'
 import { PGlite } from '@electric-sql/pglite'
 import { ed25519 } from '@noble/curves/ed25519'
@@ -11,13 +12,7 @@ import { Hono } from 'hono'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
 import type { RateLimiter } from '../rate-limit.js'
-import {
-  type AuthDeps,
-  authRoutes,
-  requireSession,
-  type SignInInput,
-  signInMessage,
-} from './auth.js'
+import { type AuthDeps, authRoutes, requireSession, signInMessage } from './auth.js'
 
 const DASHBOARD = 'https://publisher.example'
 const START = new Date('2026-10-06T12:00:00.000Z')
@@ -62,12 +57,10 @@ const post = (path: string, body: unknown) =>
     body: JSON.stringify(body),
   })
 
-type Challenge = { input: SignInInput; message: string }
-
-async function challenge(wallet: string): Promise<Challenge> {
+async function challenge(wallet: string): Promise<AuthChallenge> {
   const res = await post('/v1/auth/challenge', { wallet })
   expect(res.status).toBe(200)
-  return (await res.json()) as Challenge
+  return authChallengeSchema.parse(await res.json())
 }
 
 const sign = (secret: Uint8Array, message: string) =>
@@ -206,8 +199,7 @@ describe('POST /v1/auth/verify', () => {
       signature: sign(secret, message),
     })
     expect(res.status).toBe(200)
-    const { token, expiresAt } = (await res.json()) as { token: string; expiresAt: string }
-    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    const { token, expiresAt } = sessionGrantSchema.parse(await res.json())
     expect(expiresAt).toBe(new Date(START.getTime() + 12 * HOUR).toISOString())
 
     const rows = await db.select().from(sessions)

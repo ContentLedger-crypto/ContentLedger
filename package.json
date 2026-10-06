@@ -20,5 +20,30 @@
     "@types/node": "26.4.1",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
+  },
+  "pnpm": {
+    "packageExtensions": {
+      "@react-native-async-storage/async-storage": {
+        "peerDependenciesMeta": {
+          "react-native": {
+            "optional": true
+          }
+        }
+      },
+      "@solana-mobile/mobile-wallet-adapter-protocol": {
+        "peerDependenciesMeta": {
+          "react-native": {
+            "optional": true
+          }
+        }
+      },
+      "@solana-mobile/wallet-adapter-mobile": {
+        "peerDependenciesMeta": {
+          "react-native": {
+            "optional": true
+          }
+        }
+      }
+    }
   }
 }
