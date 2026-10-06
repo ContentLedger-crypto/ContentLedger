@@ -1,24 +1,24 @@
 import { FlowMap, MapBand } from '@/components/FlowMap'
-import { Column, FieldLabel, Figure, Section, UnverifiedMark } from '@/components/Primitives'
+import { Column, FieldLabel, Figure, Section } from '@/components/Primitives'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import {
-  ACCRUAL_PROSE,
-  COLOR,
-  CONSUMER_BY_ID,
   CONSUMER_TOTALS,
-  FEE_PROSE,
-  formatCount,
-  formatUsdc,
   PERIOD_LABEL,
   PERIOD_PAID_BY_AGENTS,
   PERIOD_PROTOCOL_FEE,
-  PERIOD_RECEIVED,
-  PERIOD_REQUESTS,
   SETTLEMENT,
-  UNVERIFIED_SENTENCE,
-  WORK_BY_ID,
-  WORK_TOTALS,
-} from '@/lib/mock'
+  summary,
+} from '@/lib/api'
+import { formatCount, formatUsdc, shareOf, truncateMiddle, workPath } from '@/lib/format'
+import { COLOR } from '@/lib/theme'
+
+const FEE_PROSE =
+  'The fee is charged on top of the rate you set. You receive the rate you set, exactly.'
+const ACCRUAL_PROSE = 'Accrued takings are paid out in the next batch, about once a minute.'
+
+const WORK_TOTALS = [...summary.byWork].sort((a, b) =>
+  a.total === b.total ? 0 : a.total > b.total ? -1 : 1,
+)
 
 const PERIOD_CHOICES: readonly { readonly label: string; readonly current: boolean }[] = [
   { label: '7 days', current: true },
@@ -59,7 +59,7 @@ export function Summary() {
           <div className="grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-10">
             <div>
               <FieldLabel>Received</FieldLabel>
-              <Figure value={formatUsdc(PERIOD_RECEIVED)} size={narrow ? 24 : 30} align="left" />
+              <Figure value={formatUsdc(summary.total)} size={narrow ? 24 : 30} align="left" />
             </div>
             <div>
               <FieldLabel>Paid by agents</FieldLabel>
@@ -152,7 +152,7 @@ function TableHead({ columns, template }: { columns: readonly string[]; template
   )
 }
 
-const WORK_TEMPLATE = 'minmax(0,1fr) 110px 190px 160px 90px'
+const WORK_TEMPLATE = 'minmax(0,1fr) 110px 160px 90px'
 
 function ByWork({ narrow }: { narrow: boolean }) {
   return (
@@ -165,33 +165,13 @@ function ByWork({ narrow }: { narrow: boolean }) {
       </h2>
       <div style={{ borderTop: `1px solid ${COLOR.hairline}` }}>
         {!narrow && (
-          <TableHead
-            template={WORK_TEMPLATE}
-            columns={['Work', 'Requests', 'Train / inference rate', 'Amount', 'Share']}
-          />
+          <TableHead template={WORK_TEMPLATE} columns={['Work', 'Requests', 'Amount', 'Share']} />
         )}
         {WORK_TOTALS.map((total) => {
-          const work = WORK_BY_ID[total.workId]
-          if (!work) return null
-          const rateText = `${formatUsdc(work.rateTrain).replace(' USDC', '')} / ${formatUsdc(
-            work.rateInference,
-          ).replace(' USDC', '')}`
-          const sourceText =
-            work.rateSource === 'domain' ? 'rate from domain' : 'rate set on this work'
-
+          const share = shareOf(total.total, summary.total) ?? '—'
           const titleCell = (
-            <div className="min-w-0">
-              <div className="serif" style={{ fontSize: 16, lineHeight: 1.45 }}>
-                {work.title}
-              </div>
-              <div className="serif" style={{ color: COLOR.muted, fontSize: 13, lineHeight: 1.5 }}>
-                {sourceText}
-              </div>
-              {!work.hashMatches && (
-                <div style={{ marginTop: 2 }}>
-                  <UnverifiedMark sentence={UNVERIFIED_SENTENCE} />
-                </div>
-              )}
+            <div className="serif min-w-0 truncate" style={{ fontSize: 16 }} title={total.sourceId}>
+              {workPath(total.sourceId)}
             </div>
           )
 
@@ -203,10 +183,9 @@ function ByWork({ narrow }: { narrow: boolean }) {
                 style={{ borderBottom: `1px solid ${COLOR.hairline}` }}
               >
                 {titleCell}
-                <StackedPair label="Requests" value={formatCount(total.requests)} />
-                <StackedPair label="Train / inference rate" value={rateText} />
-                <StackedPair label="Amount" value={formatUsdc(total.amount)} />
-                <StackedPair label="Share" value={total.share} />
+                <StackedPair label="Requests" value={formatCount(total.count)} />
+                <StackedPair label="Amount" value={formatUsdc(total.total)} />
+                <StackedPair label="Share" value={share} />
               </div>
             )
           }
@@ -214,7 +193,7 @@ function ByWork({ narrow }: { narrow: boolean }) {
           return (
             <div
               key={total.workId}
-              className="grid min-h-[56px] items-center gap-5 px-5 py-4"
+              className="grid h-[56px] items-center gap-5 px-5"
               style={{
                 gridTemplateColumns: WORK_TEMPLATE,
                 borderBottom: `1px solid ${COLOR.hairline}`,
@@ -222,16 +201,13 @@ function ByWork({ narrow }: { narrow: boolean }) {
             >
               {titleCell}
               <span className="fig" style={{ fontSize: 15 }}>
-                {formatCount(total.requests)}
+                {formatCount(total.count)}
               </span>
               <span className="fig" style={{ fontSize: 15 }}>
-                {rateText}
-              </span>
-              <span className="fig" style={{ fontSize: 15 }}>
-                {formatUsdc(total.amount)}
+                {formatUsdc(total.total)}
               </span>
               <span className="fig" style={{ fontSize: 15, color: COLOR.muted }}>
-                {total.share}
+                {share}
               </span>
             </div>
           )
@@ -242,8 +218,8 @@ function ByWork({ narrow }: { narrow: boolean }) {
             <div className="serif" style={{ fontSize: 16 }}>
               Total
             </div>
-            <StackedPair label="Requests" value={formatCount(PERIOD_REQUESTS)} />
-            <StackedPair label="Amount" value={formatUsdc(PERIOD_RECEIVED)} />
+            <StackedPair label="Requests" value={formatCount(summary.count)} />
+            <StackedPair label="Amount" value={formatUsdc(summary.total)} />
           </div>
         ) : (
           <div
@@ -254,11 +230,10 @@ function ByWork({ narrow }: { narrow: boolean }) {
               Total
             </span>
             <span className="fig" style={{ fontSize: 15 }}>
-              {formatCount(PERIOD_REQUESTS)}
+              {formatCount(summary.count)}
             </span>
-            <span />
             <span className="fig" style={{ fontSize: 15 }}>
-              {formatUsdc(PERIOD_RECEIVED)}
+              {formatUsdc(summary.total)}
             </span>
             <span />
           </div>
@@ -287,37 +262,34 @@ function ByConsumer({ narrow }: { narrow: boolean }) {
           />
         )}
         {CONSUMER_TOTALS.map((total) => {
-          const consumer = CONSUMER_BY_ID[total.consumerId]
-          if (!consumer) return null
-
           if (narrow) {
             return (
               <div
-                key={total.consumerId}
+                key={total.consumer}
                 className="flex flex-col gap-2 py-4"
                 style={{ borderBottom: `1px solid ${COLOR.hairline}` }}
               >
-                <div className="serif" style={{ fontSize: 16 }}>
-                  {consumer.name}
+                <div className="mono" title={total.consumer}>
+                  {truncateMiddle(total.consumer, 20)}
                 </div>
                 <StackedPair label="Requests" value={formatCount(total.requests)} />
                 <StackedPair label="Amount" value={formatUsdc(total.amount)} />
-                <StackedPair label="Paid by" value={consumer.paysBy} serifValue />
+                <StackedPair label="Paid by" value={total.paysBy} serifValue />
               </div>
             )
           }
 
           return (
             <div
-              key={total.consumerId}
+              key={total.consumer}
               className="grid h-[56px] items-center gap-5 px-5"
               style={{
                 gridTemplateColumns: CONSUMER_TEMPLATE,
                 borderBottom: `1px solid ${COLOR.hairline}`,
               }}
             >
-              <span className="serif truncate" style={{ fontSize: 16 }}>
-                {consumer.name}
+              <span className="mono truncate" title={total.consumer}>
+                {total.consumer}
               </span>
               <span className="fig" style={{ fontSize: 15 }}>
                 {formatCount(total.requests)}
@@ -329,7 +301,7 @@ function ByConsumer({ narrow }: { narrow: boolean }) {
                 className="serif"
                 style={{ fontSize: 15, color: COLOR.muted, textAlign: 'right' }}
               >
-                {consumer.paysBy}
+                {total.paysBy}
               </span>
             </div>
           )
@@ -340,8 +312,8 @@ function ByConsumer({ narrow }: { narrow: boolean }) {
             <div className="serif" style={{ fontSize: 16 }}>
               Total
             </div>
-            <StackedPair label="Requests" value={formatCount(PERIOD_REQUESTS)} />
-            <StackedPair label="Amount" value={formatUsdc(PERIOD_RECEIVED)} />
+            <StackedPair label="Requests" value={formatCount(summary.count)} />
+            <StackedPair label="Amount" value={formatUsdc(summary.total)} />
           </div>
         ) : (
           <div
@@ -352,10 +324,10 @@ function ByConsumer({ narrow }: { narrow: boolean }) {
               Total
             </span>
             <span className="fig" style={{ fontSize: 15 }}>
-              {formatCount(PERIOD_REQUESTS)}
+              {formatCount(summary.count)}
             </span>
             <span className="fig" style={{ fontSize: 15 }}>
-              {formatUsdc(PERIOD_RECEIVED)}
+              {formatUsdc(summary.total)}
             </span>
             <span />
           </div>

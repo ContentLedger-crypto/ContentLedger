@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Nav, type ViewName } from '@/components/Nav'
-import { COLOR } from '@/lib/mock'
+import { COLOR } from '@/lib/theme'
 import { Ledger } from '@/screens/Ledger'
 import { ReceiptScreen } from '@/screens/Receipt'
 import { Summary } from '@/screens/Summary'

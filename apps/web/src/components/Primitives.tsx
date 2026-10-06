@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import { COLOR, truncateMiddle } from '@/lib/mock'
+import { truncateMiddle } from '@/lib/format'
+import { COLOR } from '@/lib/theme'
 
 export function Column({ children }: { children: ReactNode }) {
   return <div className="mx-auto w-full max-w-[1100px] px-5 md:px-10">{children}</div>
@@ -129,19 +130,5 @@ export function Line({
         )}
       </div>
     </div>
-  )
-}
-
-/** The one terracotta mark in the app. Nothing else may use this colour. */
-export function UnverifiedMark({ sentence }: { sentence: string }) {
-  return (
-    <span
-      className="serif"
-      style={{ color: COLOR.terracotta, fontSize: 13.5, lineHeight: 1.5 }}
-      title={sentence}
-    >
-      <span style={{ letterSpacing: '0.06em' }}>unverified</span>
-      <span className="hidden md:inline"> — {sentence}</span>
-    </span>
   )
 }

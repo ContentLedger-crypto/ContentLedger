@@ -1,4 +1,5 @@
 import { acceptedAtColumns, domains, receipts, works } from '@contentledger/db'
+import type { publisherReceiptSchema } from '@contentledger/shared'
 import { and, asc, desc, eq, gte, lt, type SQL, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import type { SessionWallet } from '../routes/auth.js'
@@ -105,11 +106,12 @@ export async function summarize(db: Database, wallet: SessionWallet, { from, to 
 
 export type ReceiptItem = Awaited<ReturnType<typeof listReceipts>>['items'][number]
 
-export const receiptJson = (item: ReceiptItem) => ({
-  ...item,
-  tariff: item.tariff.toString(),
-  settledAt: item.settledAt?.toISOString() ?? null,
-})
+export const receiptJson = (item: ReceiptItem) =>
+  ({
+    ...item,
+    tariff: item.tariff.toString(),
+    settledAt: item.settledAt?.toISOString() ?? null,
+  }) satisfies z.input<typeof publisherReceiptSchema>
 
 /**
  * The receipts a live event is about, each with the one wallet allowed to see it: the

@@ -4,14 +4,18 @@ import { z } from 'zod'
 import { leafHash } from './merkle.js'
 import { usdcBaseUnitsSchema, useTypeSchema } from './money.js'
 
-const base58Key = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, 'expected a base58 pubkey')
-const hex256 = z.string().regex(/^[0-9a-f]{64}$/, 'expected a lowercase sha256 hex digest')
+export const base58KeySchema = z
+  .string()
+  .regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, 'expected a base58 pubkey')
+export const hex256Schema = z
+  .string()
+  .regex(/^[0-9a-f]{64}$/, 'expected a lowercase sha256 hex digest')
 const base58Signature = z
   .string()
   .regex(/^[1-9A-HJ-NP-Za-km-z]{86,88}$/, 'expected a base58 transaction signature')
 
 /** Один формат часу, бо два формати одного моменту дали б два різні хеші. */
-const acceptedAtSchema = z
+export const utcInstantSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/, 'expected ISO-8601 UTC with milliseconds')
 
@@ -19,15 +23,15 @@ const acceptedAtSchema = z
 const seqSchema = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
 
 const issuedFields = {
-  consumer: base58Key,
-  work: base58Key,
+  consumer: base58KeySchema,
+  work: base58KeySchema,
   useType: useTypeSchema,
   tariff: usdcBaseUnitsSchema,
   fee: usdcBaseUnitsSchema,
   rateLevel: z.enum(['domain', 'work']),
-  servedHash: hex256,
-  registryHash: hex256,
-  acceptedAt: acceptedAtSchema,
+  servedHash: hex256Schema,
+  registryHash: hex256Schema,
+  acceptedAt: utcInstantSchema,
 }
 
 export const receiptBodySchema = z.discriminatedUnion('paymentMethod', [

@@ -8,6 +8,7 @@ import {
   sessions,
   works,
 } from '@contentledger/db'
+import { publisherReceiptSchema, settlementEventSchema } from '@contentledger/shared'
 import { PGlite } from '@electric-sql/pglite'
 import { PublicKey } from '@solana/web3.js'
 import { eq, sql } from 'drizzle-orm'
@@ -228,7 +229,9 @@ describe('GET /v1/publisher/stream', () => {
     const others = await issue(key(21))
     await feed.receiptIssued(others)
 
-    expect(await alice.nextEvent()).toEqual({
+    const receipt = await alice.nextEvent()
+    expect(() => publisherReceiptSchema.parse(receipt?.data)).not.toThrow()
+    expect(receipt).toEqual({
       event: 'receipt',
       data: {
         id: own,
@@ -265,7 +268,9 @@ describe('GET /v1/publisher/stream', () => {
     await feed.batchSettled(batchId)
     feed.resync()
 
-    expect(await alice.nextEvent()).toEqual({
+    const settlement = await alice.nextEvent()
+    expect(() => settlementEventSchema.parse(settlement?.data)).not.toThrow()
+    expect(settlement).toEqual({
       event: 'settlement',
       data: { batchId, settledAt: settledAt.toISOString(), receiptIds: [id] },
     })

@@ -1,5 +1,7 @@
+import type { settlementEventSchema } from '@contentledger/shared'
 import type { Context } from 'hono'
 import { streamSSE } from 'hono/streaming'
+import type { z } from 'zod'
 import { apiError } from '../errors.js'
 import type { Feed, FeedEvent } from '../publisher/feed.js'
 import { receiptJson } from '../publisher/queries.js'
@@ -92,7 +94,7 @@ function dataOf(event: FeedEvent) {
         batchId: event.batchId,
         settledAt: event.settledAt.toISOString(),
         receiptIds: event.receiptIds,
-      }
+      } satisfies z.input<typeof settlementEventSchema>
     case 'resync':
       return {}
   }

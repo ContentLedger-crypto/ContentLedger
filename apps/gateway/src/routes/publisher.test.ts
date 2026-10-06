@@ -7,12 +7,14 @@ import {
   sessions,
   works,
 } from '@contentledger/db'
+import { publisherSummarySchema, receiptsPageSchema } from '@contentledger/shared'
 import { PGlite } from '@electric-sql/pglite'
 import { PublicKey } from '@solana/web3.js'
 import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { z } from 'zod'
 import { createApp } from '../app.js'
 import { publisherFeed } from '../publisher/feed.js'
 import { PAGE_SIZE } from '../publisher/queries.js'
@@ -144,10 +146,7 @@ const at = (minute: number) => new Date(Date.UTC(2026, 9, 6, 11, minute)).toISOS
 // Above 2^53, where a JSON number would round: the API must carry money as text.
 const HUGE = 2n ** 60n + 1n
 
-interface ReceiptsPage {
-  items: Array<Record<string, unknown>>
-  nextCursor: string | null
-}
+type ReceiptsPage = z.input<typeof receiptsPageSchema>
 
 describe('GET /v1/publisher/receipts', () => {
   it("serves the session wallet's receipts with money as decimal strings", async () => {
@@ -167,6 +166,7 @@ describe('GET /v1/publisher/receipts', () => {
 
     expect(res.status).toBe(200)
     const page = (await res.json()) as ReceiptsPage
+    expect(() => receiptsPageSchema.parse(page)).not.toThrow()
     expect(page.nextCursor).toBeNull()
     expect(page.items).toEqual([
       {
@@ -253,7 +253,9 @@ describe('GET /v1/publisher/summary', () => {
     const res = await get(`/v1/publisher/summary${period}`, ALICE)
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({
+    const summary: unknown = await res.json()
+    expect(() => publisherSummarySchema.parse(summary)).not.toThrow()
+    expect(summary).toEqual({
       total: (HUGE + 2500n).toString(),
       count: 3,
       byWork: [

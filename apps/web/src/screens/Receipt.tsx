@@ -1,24 +1,18 @@
 import type { ReactNode } from 'react'
-import { FlowMap, MapBand } from '@/components/FlowMap'
+import { edgeId, FlowMap, MapBand } from '@/components/FlowMap'
 import { Column, Line } from '@/components/Primitives'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import {
-  COLOR,
-  CONSUMER_BY_ID,
-  formatUsdc,
-  INCLUSION_PATH,
-  RECEIPT,
-  RECEIPT_EDGE_ID,
-  RECEIPT_FEE_PROSE,
-  VERIFY_PROSE,
-  VERIFY_STEPS,
-  WORK_BY_ID,
-} from '@/lib/mock'
+import { INCLUSION_PATH, RECEIPT, VERIFY_STEPS } from '@/lib/api'
+import { formatUsdc, workPath } from '@/lib/format'
+import { COLOR } from '@/lib/theme'
+
+const RECEIPT_FEE_PROSE =
+  'The fee is 10% of the rate, rounded up to the smallest unit, and is added on top. Rounding never comes out of your share.'
+const VERIFY_PROSE =
+  'Step 2 alone is not enough — a batch invented from nothing can be internally consistent. Step 3 is what makes it impossible.'
 
 export function ReceiptScreen({ onBack }: { onBack: () => void }) {
   const narrow = useIsNarrow()
-  const consumer = CONSUMER_BY_ID[RECEIPT.consumerId]
-  const work = WORK_BY_ID[RECEIPT.workId]
 
   return (
     <>
@@ -43,7 +37,10 @@ export function ReceiptScreen({ onBack }: { onBack: () => void }) {
       </Column>
 
       <MapBand>
-        <FlowMap soloEdgeId={RECEIPT_EDGE_ID} title="This receipt within the period" />
+        <FlowMap
+          soloEdgeId={edgeId(RECEIPT.consumer, RECEIPT.workId)}
+          title="This receipt within the period"
+        />
       </MapBand>
 
       <Column>
@@ -55,7 +52,7 @@ export function ReceiptScreen({ onBack }: { onBack: () => void }) {
             >
               Receipt
             </h1>
-            <div className="mono mt-3" style={{ color: COLOR.ink }}>
+            <div className="mono mt-3 break-all" style={{ color: COLOR.ink }}>
               {RECEIPT.id}
             </div>
             <div className="serif mt-1" style={{ color: COLOR.muted, fontSize: 15 }}>
@@ -64,9 +61,8 @@ export function ReceiptScreen({ onBack }: { onBack: () => void }) {
           </div>
 
           <Block title="The taking">
-            <Line label="Consumer" value={consumer ? consumer.name : RECEIPT.consumerId} />
-            {consumer && <Line label="Wallet" value={consumer.wallet} mono copyable />}
-            <Line label="Work" value={work ? work.title : RECEIPT.workId} />
+            <Line label="Consumer" value={RECEIPT.consumer} mono copyable />
+            <Line label="Work" value={workPath(RECEIPT.source)} />
             <Line label="Source" value={RECEIPT.source} />
             <Line label="Use" value={RECEIPT.use} />
             <Line label="Rate source" value={RECEIPT.rateSourceLabel} />

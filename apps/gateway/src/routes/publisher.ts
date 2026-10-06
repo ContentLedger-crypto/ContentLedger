@@ -1,3 +1,4 @@
+import type { publisherSummarySchema, receiptsPageSchema } from '@contentledger/shared'
 import { type Context, Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { z } from 'zod'
@@ -68,7 +69,7 @@ export function publisherRoutes({
     return c.json({
       items: page.items.map(receiptJson),
       nextCursor: page.nextCursor,
-    })
+    } satisfies z.input<typeof receiptsPageSchema>)
   })
 
   app.get('/v1/publisher/summary', session, async (c) => {
@@ -90,7 +91,7 @@ export function publisherRoutes({
       count: summary.count,
       byWork: summary.byWork.map((work) => ({ ...work, total: work.total.toString() })),
       registeredWorks,
-    })
+    } satisfies z.input<typeof publisherSummarySchema>)
   })
 
   app.get(

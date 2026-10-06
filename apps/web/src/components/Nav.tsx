@@ -1,5 +1,6 @@
 import { Column } from '@/components/Primitives'
-import { COLOR, PUBLISHER } from '@/lib/mock'
+import { sessionWallet } from '@/lib/api'
+import { COLOR } from '@/lib/theme'
 
 export type ViewName = 'ledger' | 'summary' | 'receipt'
 
@@ -40,8 +41,8 @@ export function Nav({
             )
           })}
         </nav>
-        <div className="serif" style={{ color: COLOR.muted, fontSize: 14 }}>
-          {PUBLISHER.name} — {PUBLISHER.domain}
+        <div className="mono" style={{ color: COLOR.muted }} title={sessionWallet}>
+          {sessionWallet}
         </div>
       </div>
     </Column>

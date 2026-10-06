@@ -1,15 +1,20 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import {
-  COLOR,
-  CONSUMER_BY_ID,
-  CONSUMER_TOTALS,
-  EDGE_FLASH_MS,
-  EDGES,
-  LARGEST_EDGE_AMOUNT,
-  WORK_BY_ID,
-  WORK_TOTALS,
-} from '@/lib/mock'
+import { CONSUMER_TOTALS, EDGES, summary } from '@/lib/api'
+import { truncateMiddle, workPath } from '@/lib/format'
+import { COLOR } from '@/lib/theme'
+
+const EDGE_FLASH_MS = 600
+
+const LARGEST_EDGE_AMOUNT = EDGES.reduce((max, edge) => (edge.amount > max ? edge.amount : max), 1n)
+
+const WORK_TOTALS = [...summary.byWork].sort((a, b) =>
+  a.total === b.total ? 0 : a.total > b.total ? -1 : 1,
+)
+
+export function edgeId(consumer: string, workId: string): string {
+  return `${consumer}~${workId}`
+}
 
 export interface EdgeFlash {
   readonly edgeId: string
@@ -63,14 +68,13 @@ export function FlowMap({ soloEdgeId, flash = null, title = 'Flow of payments' }
     /* Geometry is fractions of a pixel, so amounts cross into Number here
            and only here — every stored amount stays an integer base unit. */
     const maxConsumer = CONSUMER_TOTALS.reduce((m, t) => Math.max(m, Number(t.amount)), 1)
-    const maxWork = WORK_TOTALS.reduce((m, t) => Math.max(m, Number(t.amount)), 1)
+    const maxWork = WORK_TOTALS.reduce((m, t) => Math.max(m, Number(t.total)), 1)
 
     const consumerNodes: PlacedNode[] = CONSUMER_TOTALS.map((total, index) => {
-      const consumer = CONSUMER_BY_ID[total.consumerId]
       const len = Math.max(12, (Number(total.amount) / maxConsumer) * maxLen)
       return {
-        id: `c:${total.consumerId}`,
-        label: consumer ? consumer.name : total.consumerId,
+        id: `c:${total.consumer}`,
+        label: truncateMiddle(total.consumer, 13),
         barStart: leftBarX,
         barEnd: leftBarX + len,
         y: pad + ((index + 0.5) * usable) / CONSUMER_TOTALS.length,
@@ -79,11 +83,10 @@ export function FlowMap({ soloEdgeId, flash = null, title = 'Flow of payments' }
     })
 
     const workNodes: PlacedNode[] = WORK_TOTALS.map((total, index) => {
-      const work = WORK_BY_ID[total.workId]
-      const len = Math.max(12, (Number(total.amount) / maxWork) * maxLen)
+      const len = Math.max(12, (Number(total.total) / maxWork) * maxLen)
       return {
         id: `w:${total.workId}`,
-        label: work ? work.mapLabel : total.workId,
+        label: workPath(total.sourceId),
         barStart: rightBarX,
         barEnd: rightBarX + len,
         y: pad + ((index + 0.5) * usable) / WORK_TOTALS.length,
@@ -122,7 +125,8 @@ export function FlowMap({ soloEdgeId, flash = null, title = 'Flow of payments' }
       >
         <g>
           {EDGES.map((item) => {
-            const cId = `c:${item.consumerId}`
+            const id = edgeId(item.consumer, item.workId)
+            const cId = `c:${item.consumer}`
             const wId = `w:${item.workId}`
             const y1 = nodeY[cId]
             const y2 = nodeY[wId]
@@ -136,17 +140,17 @@ export function FlowMap({ soloEdgeId, flash = null, title = 'Flow of payments' }
 
             let opacity = rest
             if (soloEdgeId !== undefined) {
-              opacity = item.id === soloEdgeId ? 0.9 : 0.06
+              opacity = id === soloEdgeId ? 0.9 : 0.06
             } else if (hovered !== null) {
               opacity = hovered === cId || hovered === wId ? 0.85 : 0.08
             }
-            if (flashedEdge === item.id) opacity = 0.9
+            if (flashedEdge === id) opacity = 0.9
 
             const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
 
             return (
               <path
-                key={item.id}
+                key={id}
                 d={d}
                 fill="none"
                 stroke={COLOR.sage}
@@ -198,8 +202,10 @@ export function FlowMap({ soloEdgeId, flash = null, title = 'Flow of payments' }
                     fillOpacity={isDim ? 0.4 : 0.9}
                     style={{
                       fontFamily:
-                        '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif',
-                      fontSize: 15,
+                        node.side === 'left'
+                          ? 'var(--font-mono)'
+                          : '"Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif',
+                      fontSize: node.side === 'left' ? 13 : 15,
                       transition: 'fill-opacity 160ms ease',
                     }}
                   >
