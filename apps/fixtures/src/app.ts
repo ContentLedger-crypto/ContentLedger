@@ -5,16 +5,16 @@ import { sourceIdOf } from './url.js'
 const LICENCE_MARK_PATH = '/.well-known/contentledger.json'
 
 /**
- * Формат мітки наш — стандарту тут немає (`PLAN.md` → Атестатори). Вузол
- * зіставляє `owner` із власником домену в реєстрі; більше в мітці нічого немає,
- * бо все інше вузол бере ончейн, де воно підписане.
+ * The mark format is our own — there is no standard for it. An attestor node
+ * matches `owner` against the domain owner in the registry; the mark holds nothing
+ * else, because the node takes everything else on-chain, where it is signed.
  */
 interface LicenceMark {
   version: 1
   owner: string
 }
 
-const notFound = { error: { code: 'NOT_FOUND', message: 'джерела немає в корпусі' } } as const
+const notFound = { error: { code: 'NOT_FOUND', message: 'no such source in the corpus' } } as const
 
 export function createApp(corpus: Corpus): Hono {
   const app = new Hono()
@@ -37,8 +37,8 @@ export function createApp(corpus: Corpus): Hono {
     try {
       work = corpus.bySource.get(sourceIdOf(host, path))
     } catch {
-      // `sourceIdOf` кидає на неканонічній формі — зокрема на `/acme-news.test/`,
-      // де шлях порожній. Такого джерела в корпусі немає за визначенням.
+      // `sourceIdOf` throws on a non-canonical form — `/acme-news.test/` among them,
+      // where the path is empty. No such source is in the corpus by definition.
       work = undefined
     }
     if (work === undefined) {

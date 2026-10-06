@@ -1,0 +1,4 @@
+# Lines that match a sweep pattern, are not traces, and already sit in the published history.
+# Format: path<TAB>the whole line, both exact. See scripts/trace-sweep.sh.
+packages/program/Cargo.lock	 "solana-seed-phrase",
+packages/program/Cargo.lock	name = "solana-seed-phrase"

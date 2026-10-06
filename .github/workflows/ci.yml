@@ -7,15 +7,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # Без `version:` навмисно — pnpm/action-setup падає з "Multiple versions
-      # of pnpm specified", якщо у package.json є поле packageManager. Воно
-      # точніше (9.15.0) і його ж читає corepack локально.
+      # No `version:` on purpose: pnpm/action-setup fails with "Multiple versions
+      # of pnpm specified" when package.json has a packageManager field. That field
+      # is more precise (9.15.0), and corepack reads the same one locally.
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      # Та сама команда, що й локально: два описи гейта розходяться, один — ні.
+      # The same command as locally: two descriptions of the gate drift apart, one does not.
       - run: pnpm gate
+
+  # A job of its own because it alone needs the whole history: the published history
+  # is what the sweep answers for, and the other jobs should not fetch it for nothing.
+  # The `ci` mode runs every structural pattern with its self-check; only the
+  # personal-data list is absent, since it lives outside the repository on purpose.
+  traces:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: No build-machine traces in the history
+        run: bash scripts/trace-sweep.sh ci
 
   program:
     runs-on: ubuntu-latest
@@ -42,14 +55,14 @@ jobs:
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
 
       - name: anchor-cli
-        # Із кореня, а не з packages/program: там rust-toolchain.toml пінить
-        # 1.97.1 під програму, і збирати ним ще й anchor-cli — зайвий зв'язок.
+        # From the root, not packages/program: rust-toolchain.toml there pins
+        # 1.97.1 for the program, and building anchor-cli with it too is a needless coupling.
         working-directory: .
         run: |
           if ! command -v anchor >/dev/null; then
-            # anchor-cli тягне підтримку гаманців Ledger → hidapi → системний
-            # libudev, якого на образі ubuntu-latest немає, і cargo install падає
-            # на build-скрипті hidapi. pkg-config ставити не треба — він уже є.
+            # anchor-cli pulls in Ledger wallet support → hidapi → the system
+            # libudev, which the ubuntu-latest image lacks, and cargo install fails
+            # in the hidapi build script. pkg-config needs no install — it is already there.
             sudo apt-get update && sudo apt-get install -y libudev-dev
             cargo install anchor-cli --version 0.32.1 --locked
           fi
@@ -58,14 +71,14 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: anchor build
 
-      # IDL у packages/chain — копія, бо target/ під .gitignore, а TS-джоба не
-      # має ані Rust-тулчейну, ані 18 хвилин на збірку програми. Звіряти його
-      # можна лише тут, де щойно пройшов anchor build: застаріла копія стає
-      # червоним CI, а не транзакцією з не тими байтами на devnet.
-      - name: IDL збігається з програмою
+      # The IDL in packages/chain is a copy, because target/ is gitignored and the TS
+      # job has neither a Rust toolchain nor 18 minutes to build the program. It can
+      # only be checked here, right after anchor build: a stale copy becomes a red
+      # CI rather than a transaction with the wrong bytes on devnet.
+      - name: IDL matches the program
         working-directory: .
         run: node packages/chain/scripts/sync-idl.mjs --check
 
-      # Тільки після anchor build: mollusk вантажить contentledger.so з SBF_OUT_DIR,
-      # а до збірки його не існує.
+      # Only after anchor build: mollusk loads contentledger.so from SBF_OUT_DIR,
+      # and before the build it does not exist.
       - run: SBF_OUT_DIR=$PWD/target/deploy cargo test --manifest-path programs/contentledger/Cargo.toml

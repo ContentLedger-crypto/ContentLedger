@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["e2e", "vitest.config.ts", "vitest.m1.config.ts"]
+  "include": ["e2e", "repo", "vitest.config.ts", "vitest.m1.config.ts"]
 }
