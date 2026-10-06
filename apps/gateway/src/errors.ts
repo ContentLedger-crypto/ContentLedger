@@ -1,5 +1,6 @@
 export type ApiErrorCode =
   | 'INVALID_INPUT'
+  | 'UNAUTHORIZED'
   | 'NOT_FOUND'
   | 'NOT_LICENSED'
   | 'PAYMENT_REQUIRED'
