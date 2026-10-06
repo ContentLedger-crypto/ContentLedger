@@ -28,6 +28,7 @@ import { Connection, Keypair, PublicKey, SystemProgram } from '@solana/web3.js'
 import { expect, it } from 'vitest'
 import { z } from 'zod'
 import { attempt, tamperVoucher, unknownSignature } from './attacks.js'
+import { errorChain } from './error-chain.js'
 import {
   type Attempt,
   costVerdict,
@@ -537,7 +538,7 @@ it('M1 on devnet: 1000 paid requests, SC-001, SC-002, SC-005, SC-006, SC-008', a
       transactions: { deposit: depositSig, batches: [...batchSigs], x402: x402Sigs },
     }
   } catch (error) {
-    failure = redact(error instanceof Error ? error.message : String(error))
+    failure = redact(errorChain(error))
     progress(`failed: ${failure}`)
   } finally {
     for (const service of services.reverse()) await service.stop()

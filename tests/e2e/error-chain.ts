@@ -1,12 +1,8 @@
-export type ApiErrorCode =
-  | 'INVALID_INPUT'
-  | 'NOT_FOUND'
-  | 'NOT_LICENSED'
-  | 'PAYMENT_REQUIRED'
-  | 'RATE_LIMITED'
-  | 'INTERNAL'
-
-/** `TypeError: fetch failed ← Error: connect ECONNREFUSED 127.0.0.1:8880 (ECONNREFUSED)` */
+/**
+ * The same walk as the gateway's `errorChain`, kept here rather than imported: this
+ * package does not depend on the gateway, and a run that broke on "fetch failed" with
+ * no cause cannot tell which of its local services dropped the connection.
+ */
 export function errorChain(error: unknown): string {
   const links: string[] = []
   const seen = new Set<unknown>()
@@ -27,9 +23,3 @@ export function errorChain(error: unknown): string {
   }
   return links.join(' ← ')
 }
-
-export const apiError = <D extends Record<string, unknown>>(
-  code: ApiErrorCode,
-  message: string,
-  details: D,
-) => ({ error: { code, message, details } })

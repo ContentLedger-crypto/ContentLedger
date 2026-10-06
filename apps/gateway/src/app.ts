@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { apiError } from './errors.js'
+import { apiError, errorChain } from './errors.js'
 
 /** Route groups arrive built, each with its own dependencies; this adds what they share. */
 export function createApp(...routes: Hono[]): Hono {
@@ -9,7 +9,7 @@ export function createApp(...routes: Hono[]): Hono {
   // RPC errors carry the provider URL, and with it the API key: neither the client
   // nor the host's log may see it.
   app.onError((error, c) => {
-    console.error(`${c.req.method} ${c.req.path} failed: ${redactKeys(String(error))}`)
+    console.error(`${c.req.method} ${c.req.path} failed: ${redactKeys(errorChain(error))}`)
     return c.json(apiError('INTERNAL', 'internal error', {}), 500)
   })
   app.notFound((c) => c.json(apiError('NOT_FOUND', 'no such endpoint', {}), 404))
