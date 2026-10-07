@@ -7,13 +7,17 @@ const corpus = loadCorpus()
 const works = corpus.domains.flatMap((domain) => domain.works)
 
 describe('корпус фікстур', () => {
-  it('має три домени й дванадцять творів', () => {
+  it('має чотири домени й пʼятнадцять творів: три активні видавці для прогону M2', () => {
     expect(corpus.domains.map((domain) => domain.host)).toEqual([
       'acme-news.test',
       'kyiv-photo.test',
       'devblog.test',
+      'harbour-almanac.test',
     ])
-    expect(works).toHaveLength(12)
+    expect(works).toHaveLength(15)
+    expect(
+      new Set(corpus.domains.filter((d) => d.status === 'active').map((d) => d.owner)).size,
+    ).toBe(3)
   })
 
   it('несе межові випадки реєстру, а не лише щасливий шлях', () => {

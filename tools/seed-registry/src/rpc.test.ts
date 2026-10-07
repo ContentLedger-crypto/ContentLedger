@@ -10,8 +10,8 @@ const accounts = seedAccounts(plan)
 
 describe('акаунти посіву', () => {
   it('кожен унікальний, хоч кроків удвічі більше', () => {
-    expect(accounts).toHaveLength(15)
-    expect(new Set(accounts.map(({ address }) => address.toBase58())).size).toBe(15)
+    expect(accounts).toHaveLength(19)
+    expect(new Set(accounts.map(({ address }) => address.toBase58())).size).toBe(19)
     expect(plan.length).toBeGreaterThan(accounts.length)
   })
 
@@ -22,13 +22,13 @@ describe('акаунти посіву', () => {
     const entry = accounts.find(({ address }) => address.toBase58() === devblog)
 
     expect(entry?.kind).toBe('domain')
-    expect(accounts.filter(({ kind }) => kind === 'domain')).toHaveLength(3)
+    expect(accounts.filter(({ kind }) => kind === 'domain')).toHaveLength(4)
   })
 
   it('PDA твору зі ставками лишається твором', () => {
     const rated = workPda('https://acme-news.test/2026/solana-fee-market.html')[0].toBase58()
 
     expect(accounts.find(({ address }) => address.toBase58() === rated)?.kind).toBe('work')
-    expect(accounts.filter(({ kind }) => kind === 'work')).toHaveLength(12)
+    expect(accounts.filter(({ kind }) => kind === 'work')).toHaveLength(15)
   })
 })

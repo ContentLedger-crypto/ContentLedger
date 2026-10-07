@@ -97,6 +97,32 @@
           "status": "active"
         }
       ]
+    },
+    {
+      "host": "harbour-almanac.test",
+      "owner": "GMzqfK1rBAkHVPAaEUNE24cfamFYcZ5vNTTpWWR3fgg1",
+      "payoutOwner": "GMzqfK1rBAkHVPAaEUNE24cfamFYcZ5vNTTpWWR3fgg1",
+      "rateTrain": "4000",
+      "rateInference": "1200",
+      "status": "active",
+      "works": [
+        {
+          "path": "/tides/2026-odesa.html",
+          "mediaType": "text/html; charset=utf-8",
+          "status": "active"
+        },
+        {
+          "path": "/tides/2026-odesa.json",
+          "mediaType": "application/json",
+          "status": "active",
+          "rateTrain": "7000"
+        },
+        {
+          "path": "/notes/reading-a-tide-table.md",
+          "mediaType": "text/markdown; charset=utf-8",
+          "status": "active"
+        }
+      ]
     }
   ]
 }

@@ -42,6 +42,11 @@ describe('план посіву', () => {
       'register_work https://devblog.test/posts/anchor-idl-traps.md',
       'register_work https://devblog.test/posts/hono-sse.html',
       'register_work https://devblog.test/feeds/atom.json',
+      'register_domain harbour-almanac.test',
+      'register_work https://harbour-almanac.test/tides/2026-odesa.html',
+      'register_work https://harbour-almanac.test/tides/2026-odesa.json',
+      'set_work_rates https://harbour-almanac.test/tides/2026-odesa.json',
+      'register_work https://harbour-almanac.test/notes/reading-a-tide-table.md',
     ])
   })
 

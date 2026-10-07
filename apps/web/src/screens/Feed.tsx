@@ -202,7 +202,9 @@ function Row({
   const detail = standingDetail(standing, today)
   const title = standing.kind === 'settled' ? `Settled ${standing.at}` : 'Accrued, not yet settled'
 
+  // The M2 run times SC-003 to the moment this row enters the page, by receipt id.
   const common = {
+    'data-receipt-id': row.id,
     className: row.arrived ? 'row-enter' : undefined,
     style: {
       borderBottom: `1px solid ${COLOR.hairline}`,

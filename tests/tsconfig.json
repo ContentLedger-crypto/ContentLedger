@@ -1,7 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    // The M2 run hands the dashboard page a wallet and a row watcher, written here.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
-  "include": ["e2e", "repo", "vitest.config.ts", "vitest.m1.config.ts"]
+  "include": ["e2e", "repo", "vitest.config.ts", "vitest.m1.config.ts", "vitest.m2.config.ts"]
 }
