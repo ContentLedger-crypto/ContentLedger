@@ -2,7 +2,9 @@
 # this file from /etc/caddy/sites/, so it carries a site block and nothing global.
 #
 # Caddy trusts no proxy by default: it drops any `x-forwarded-for` a caller sends and
-# passes exactly one entry, the caller's address — hence TRUSTED_PROXY_HOPS=0.
+# passes exactly one entry, the caller's address — hence TRUSTED_PROXY_HOPS=1. With 0 the
+# gateway takes the socket address, which behind Caddy is 127.0.0.1 for every client,
+# and the whole internet shares one rate-limit bucket.
 # The live feed is a long response: no `encode` here, compression would buffer it.
 contentledger.204-168-183-173.sslip.io {
 	reverse_proxy 127.0.0.1:8879
