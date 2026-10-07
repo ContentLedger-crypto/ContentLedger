@@ -234,7 +234,7 @@ describe('GET /v1/publisher/receipts', () => {
 describe('GET /v1/publisher/summary', () => {
   const period = `?from=${encodeURIComponent(at(0))}&to=${encodeURIComponent(at(30))}`
 
-  it('sums the period by work, with the count of works registered on chain', async () => {
+  it('sums the period by work, consumer and flow, with the count of works registered on chain', async () => {
     const asked: string[] = []
     registry = {
       countWorks: async (owner) => {
@@ -259,6 +259,7 @@ describe('GET /v1/publisher/summary', () => {
     expect(() => publisherSummarySchema.parse(summary)).not.toThrow()
     expect(summary).toEqual({
       total: (HUGE + 2500n).toString(),
+      fee: '30',
       count: 3,
       byWork: [
         {
@@ -269,6 +270,19 @@ describe('GET /v1/publisher/summary', () => {
         },
         { workId: key(12), sourceId: 'https://alice.test/b', count: 1, total: '500' },
       ],
+      byConsumer: [
+        {
+          consumer: AGENT,
+          count: 3,
+          total: (HUGE + 2500n).toString(),
+          paymentMethods: ['escrow'],
+        },
+      ],
+      flows: [
+        { consumer: AGENT, workId: key(11), count: 2, total: (HUGE + 2000n).toString() },
+        { consumer: AGENT, workId: key(12), count: 1, total: '500' },
+      ],
+      settlement: { inBatch: '0', accrued: (HUGE + 2500n).toString(), perRequest: '0' },
       registeredWorks: 5,
     })
     expect(asked).toEqual([ALICE])
@@ -277,7 +291,16 @@ describe('GET /v1/publisher/summary', () => {
   it('tells a publisher with nothing registered so, rather than an empty period', async () => {
     registry = { countWorks: async () => 0 }
     const res = await get(`/v1/publisher/summary${period}`, BOB)
-    expect(await res.json()).toEqual({ total: '0', count: 0, byWork: [], registeredWorks: 0 })
+    expect(await res.json()).toEqual({
+      total: '0',
+      fee: '0',
+      count: 0,
+      byWork: [],
+      byConsumer: [],
+      flows: [],
+      settlement: { inBatch: '0', accrued: '0', perRequest: '0' },
+      registeredWorks: 0,
+    })
   })
 
   it('still answers when the chain cannot be read, without leaking the RPC key', async () => {

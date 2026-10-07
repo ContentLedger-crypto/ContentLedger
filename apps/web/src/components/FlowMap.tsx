@@ -1,16 +1,11 @@
+import type { PublisherSummary } from '@contentledger/shared'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import { CONSUMER_TOTALS, EDGES, summary } from '@/lib/api'
 import { truncateMiddle, workPath } from '@/lib/format'
+import { byTotalDescending } from '@/lib/summary'
 import { COLOR } from '@/lib/theme'
 
 const EDGE_FLASH_MS = 600
-
-const LARGEST_EDGE_AMOUNT = EDGES.reduce((max, edge) => (edge.amount > max ? edge.amount : max), 1n)
-
-const WORK_TOTALS = [...summary.byWork].sort((a, b) =>
-  a.total === b.total ? 0 : a.total > b.total ? -1 : 1,
-)
 
 export function edgeId(consumer: string, workId: string): string {
   return `${consumer}~${workId}`
@@ -22,6 +17,7 @@ export interface EdgeFlash {
 }
 
 interface FlowMapProps {
+  readonly summary: Pick<PublisherSummary, 'byConsumer' | 'byWork' | 'flows'>
   /** When set, that one edge is drawn at 0.9 and every other edge at 0.06. */
   readonly soloEdgeId?: string
   /** A momentary brightening of one edge, 600ms, then back to rest. */
@@ -38,7 +34,12 @@ interface PlacedNode {
   readonly side: 'left' | 'right'
 }
 
-export function FlowMap({ soloEdgeId, flash = null, title = 'Flow of payments' }: FlowMapProps) {
+export function FlowMap({
+  summary,
+  soloEdgeId,
+  flash = null,
+  title = 'Flow of payments',
+}: FlowMapProps) {
   const narrow = useIsNarrow()
   const [hovered, setHovered] = useState<string | null>(null)
   const [flashedEdge, setFlashedEdge] = useState<string | null>(null)
@@ -67,35 +68,38 @@ export function FlowMap({ soloEdgeId, flash = null, title = 'Flow of payments' }
 
     /* Geometry is fractions of a pixel, so amounts cross into Number here
            and only here — every stored amount stays an integer base unit. */
-    const maxConsumer = CONSUMER_TOTALS.reduce((m, t) => Math.max(m, Number(t.amount)), 1)
-    const maxWork = WORK_TOTALS.reduce((m, t) => Math.max(m, Number(t.total)), 1)
+    const consumers = summary.byConsumer
+    const works = [...summary.byWork].sort(byTotalDescending)
+    const maxConsumer = consumers.reduce((m, t) => Math.max(m, Number(t.total)), 1)
+    const maxWork = works.reduce((m, t) => Math.max(m, Number(t.total)), 1)
+    const largestFlow = summary.flows.reduce((m, t) => Math.max(m, Number(t.total)), 1)
 
-    const consumerNodes: PlacedNode[] = CONSUMER_TOTALS.map((total, index) => {
-      const len = Math.max(12, (Number(total.amount) / maxConsumer) * maxLen)
+    const consumerNodes: PlacedNode[] = consumers.map((total, index) => {
+      const len = Math.max(12, (Number(total.total) / maxConsumer) * maxLen)
       return {
         id: `c:${total.consumer}`,
         label: truncateMiddle(total.consumer, 13),
         barStart: leftBarX,
         barEnd: leftBarX + len,
-        y: pad + ((index + 0.5) * usable) / CONSUMER_TOTALS.length,
+        y: pad + ((index + 0.5) * usable) / consumers.length,
         side: 'left',
       }
     })
 
-    const workNodes: PlacedNode[] = WORK_TOTALS.map((total, index) => {
+    const workNodes: PlacedNode[] = works.map((total, index) => {
       const len = Math.max(12, (Number(total.total) / maxWork) * maxLen)
       return {
         id: `w:${total.workId}`,
         label: workPath(total.sourceId),
         barStart: rightBarX,
         barEnd: rightBarX + len,
-        y: pad + ((index + 0.5) * usable) / WORK_TOTALS.length,
+        y: pad + ((index + 0.5) * usable) / works.length,
         side: 'right',
       }
     })
 
-    return { viewW, height, barH, rightBarX, consumerNodes, workNodes }
-  }, [narrow])
+    return { viewW, height, barH, rightBarX, consumerNodes, workNodes, largestFlow }
+  }, [narrow, summary])
 
   const nodeY = useMemo(() => {
     const map: Record<string, number> = {}
@@ -124,7 +128,7 @@ export function FlowMap({ soloEdgeId, flash = null, title = 'Flow of payments' }
         style={{ display: 'block', overflow: 'visible' }}
       >
         <g>
-          {EDGES.map((item) => {
+          {summary.flows.map((item) => {
             const id = edgeId(item.consumer, item.workId)
             const cId = `c:${item.consumer}`
             const wId = `w:${item.workId}`
@@ -134,7 +138,7 @@ export function FlowMap({ soloEdgeId, flash = null, title = 'Flow of payments' }
             if (y1 === undefined || y2 === undefined || x1 === undefined) return null
             const x2 = geometry.rightBarX
 
-            const weight = Number(item.amount) / Number(LARGEST_EDGE_AMOUNT)
+            const weight = Number(item.total) / geometry.largestFlow
             const width = 1 + 7 * weight
             const rest = 0.22 + 0.38 * weight
 

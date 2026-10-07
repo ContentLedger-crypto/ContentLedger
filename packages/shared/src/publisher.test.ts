@@ -19,8 +19,9 @@ const wireReceipt = {
 }
 
 const wireSummary = {
-  total: '4246900',
-  count: 3536,
+  total: '483900',
+  fee: '48390',
+  count: 420,
   byWork: [
     {
       workId: 'BUHqsiLM6HyUEKrdVAtWQ1KG9K9oKJJAJXjUv3fFmHLp',
@@ -29,6 +30,23 @@ const wireSummary = {
       total: '483900',
     },
   ],
+  byConsumer: [
+    {
+      consumer: 'Kzb7q9Np5Zr9QBo7iafi2yCBisiHJg7r7HezzgvbuQ2T',
+      count: 420,
+      total: '483900',
+      paymentMethods: ['escrow', 'x402'],
+    },
+  ],
+  flows: [
+    {
+      consumer: 'Kzb7q9Np5Zr9QBo7iafi2yCBisiHJg7r7HezzgvbuQ2T',
+      workId: 'BUHqsiLM6HyUEKrdVAtWQ1KG9K9oKJJAJXjUv3fFmHLp',
+      count: 420,
+      total: '483900',
+    },
+  ],
+  settlement: { inBatch: '400000', accrued: '3900', perRequest: '80000' },
   registeredWorks: 5,
 }
 
@@ -94,11 +112,45 @@ describe('receiptsPageSchema', () => {
 })
 
 describe('publisherSummarySchema', () => {
-  it('parses totals into bigint', () => {
+  it('parses every amount into bigint', () => {
     const summary = publisherSummarySchema.parse(wireSummary)
-    expect(summary.total).toBe(4_246_900n)
+    expect(summary.total).toBe(483_900n)
+    expect(summary.fee).toBe(48_390n)
     expect(summary.byWork[0]?.total).toBe(483_900n)
+    expect(summary.byConsumer[0]?.total).toBe(483_900n)
+    expect(summary.flows[0]?.total).toBe(483_900n)
+    expect(summary.settlement).toEqual({ inBatch: 400_000n, accrued: 3_900n, perRequest: 80_000n })
     expect(summary.registeredWorks).toBe(5)
+  })
+
+  it('accepts a period with nothing taken', () => {
+    const empty = publisherSummarySchema.parse({
+      ...wireSummary,
+      total: '0',
+      fee: '0',
+      count: 0,
+      byWork: [],
+      byConsumer: [],
+      flows: [],
+      settlement: { inBatch: '0', accrued: '0', perRequest: '0' },
+    })
+    expect(empty.byConsumer).toEqual([])
+  })
+
+  it('rejects a consumer that paid by no method, or by one the ledger does not know', () => {
+    const consumer = wireSummary.byConsumer[0]
+    for (const paymentMethods of [[], ['card']]) {
+      const result = publisherSummarySchema.safeParse({
+        ...wireSummary,
+        byConsumer: [{ ...consumer, paymentMethods }],
+      })
+      expect(result.success, JSON.stringify(paymentMethods)).toBe(false)
+    }
+  })
+
+  it('rejects a summary without the settlement split', () => {
+    const { settlement: _, ...partial } = wireSummary
+    expect(publisherSummarySchema.safeParse(partial).success).toBe(false)
   })
 
   it('keeps an unread chain distinct from zero registered works', () => {

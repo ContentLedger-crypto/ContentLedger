@@ -12,31 +12,40 @@ export function retryDelayMs(attempt: number, retryAfterSeconds: number | null):
 
 export type Link = 'connecting' | 'live' | 'reconnecting'
 
-export interface FeedSink {
-  update(change: (state: FeedState) => FeedState): void
+export interface StreamSink {
   link(link: Link): void
-  arrival(receipt: PublisherReceipt): void
   /** The gateway refused the session: it ended, or was never valid. Nothing is retried. */
   unauthorized(): void
 }
 
+export interface FeedSink extends StreamSink {
+  update(change: (state: FeedState) => FeedState): void
+  arrival(receipt: PublisherReceipt): void
+}
+
+/**
+ * What one attempt does with the stream's events. `fail` ends the attempt and sends it
+ * through the same retry as a dropped stream; `signal` aborts when the attempt ends.
+ */
+export type StreamReader = (
+  fail: (error: unknown) => void,
+  signal: AbortSignal,
+) => (event: FeedEvent) => void
+
 // A stream that stayed up this long was healthy: a gateway restart is not a failure streak.
 const HEALTHY_MS = 60_000
 
-/**
- * One stream at a time, re-opened after a pause that grows while it keeps failing. Every
- * `ready` and `resync` re-reads the first page, so nothing issued while the stream was
- * down is missed; a failed read ends the attempt and goes through the same retry.
- */
-export async function followFeed(
-  source: FeedSource,
-  sink: FeedSink,
+/** One stream at a time, re-opened after a pause that grows while it keeps failing. */
+export async function followStream(
+  stream: FeedSource['stream'],
+  reader: StreamReader,
+  sink: StreamSink,
   signal: AbortSignal,
 ): Promise<void> {
   let failures = 0
   while (!signal.aborted) {
     const opened = Date.now()
-    const failure = await attempt(source, sink, signal)
+    const failure = await attempt(stream, reader, signal)
     if (signal.aborted) return
     if (failure instanceof ApiError && failure.status === 401) {
       sink.unauthorized()
@@ -49,7 +58,7 @@ export async function followFeed(
   }
 }
 
-async function attempt(source: FeedSource, sink: FeedSink, signal: AbortSignal) {
+async function attempt(stream: FeedSource['stream'], reader: StreamReader, signal: AbortSignal) {
   const current = new AbortController()
   const stop = () => current.abort(signal.reason)
   signal.addEventListener('abort', stop, { once: true })
@@ -58,34 +67,45 @@ async function attempt(source: FeedSource, sink: FeedSink, signal: AbortSignal) 
     failure ??= error
     current.abort(error)
   }
-  const snapshot = () =>
-    source.receipts(null, current.signal).then((page) => {
-      sink.update((state) => withSnapshot(state, page))
-      sink.link('live')
-    }, fail)
-  const handle = (event: FeedEvent) => {
-    switch (event.type) {
-      case 'ready':
-      case 'resync':
-        void snapshot()
-        break
-      case 'receipt':
-        sink.update((state) => withReceipt(state, event.receipt))
-        sink.arrival(event.receipt)
-        break
-      case 'settlement':
-        sink.update((state) => withSettlement(state, event.settlement))
-        break
-    }
-  }
   try {
-    await source.stream(handle, current.signal)
+    await stream(reader(fail, current.signal), current.signal)
   } catch (error) {
     failure ??= error
   } finally {
     signal.removeEventListener('abort', stop)
+    current.abort()
   }
   return failure
+}
+
+/**
+ * Every `ready` and `resync` re-reads the first page, so nothing issued while the stream
+ * was down is missed; a failed read ends the attempt and goes through the same retry.
+ */
+export function followFeed(source: FeedSource, sink: FeedSink, signal: AbortSignal) {
+  const reader: StreamReader = (fail, current) => {
+    const snapshot = () =>
+      source.receipts(null, current).then((page) => {
+        sink.update((state) => withSnapshot(state, page))
+        sink.link('live')
+      }, fail)
+    return (event) => {
+      switch (event.type) {
+        case 'ready':
+        case 'resync':
+          void snapshot()
+          break
+        case 'receipt':
+          sink.update((state) => withReceipt(state, event.receipt))
+          sink.arrival(event.receipt)
+          break
+        case 'settlement':
+          sink.update((state) => withSettlement(state, event.settlement))
+          break
+      }
+    }
+  }
+  return followStream(source.stream, reader, sink, signal)
 }
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {

@@ -5,9 +5,9 @@ import { Nav, type ViewName } from '@/components/Nav'
 import {
   authApi,
   dataMode,
-  type FeedSource,
+  type PublisherSource,
   publisherApiFor,
-  sampleFeed,
+  sampleSource,
   sampleWallet,
 } from '@/lib/api'
 import { COLOR } from '@/lib/theme'
@@ -16,12 +16,11 @@ import { ReceiptScreen } from '@/screens/Receipt'
 import { Summary } from '@/screens/Summary'
 
 const PREVIEW_NOTICE = 'Preview with sample figures: no gateway is connected to this page.'
-const SAMPLE_SUMMARY_NOTICE = 'Sample figures: the summary does not yet read this wallet’s takings.'
 
 const App = () => (
   <div style={{ background: COLOR.ground, minHeight: '100vh', color: COLOR.ink }}>
     {authApi === null ? (
-      <Dashboard wallet={sampleWallet} source={sampleFeed} preview />
+      <Dashboard wallet={sampleWallet} source={sampleSource} preview />
     ) : (
       <AuthProvider api={authApi}>
         <SignedIn />
@@ -51,13 +50,13 @@ function Dashboard({
   onSignOut,
 }: {
   wallet: string
-  source: FeedSource
-  /** Sample figures throughout; otherwise the feed is this wallet's and the rest says so. */
+  source: PublisherSource
+  /** Sample figures throughout; otherwise everything but the receipt screen is this wallet's. */
   preview: boolean
   onSignOut?: () => void
 }) {
   const [view, setView] = useState<ViewName>('ledger')
-  const notice = preview ? PREVIEW_NOTICE : view === 'summary' ? SAMPLE_SUMMARY_NOTICE : null
+  const notice = preview ? PREVIEW_NOTICE : null
 
   return (
     <>
@@ -74,13 +73,12 @@ function Dashboard({
       {view === 'ledger' && (
         <Ledger
           source={source}
-          sampleBand={!preview}
           onUnauthorized={onSignOut}
           // The receipt screen shows a sample until it reads the row it was opened from.
           onOpenReceipt={preview ? () => setView('receipt') : undefined}
         />
       )}
-      {view === 'summary' && <Summary />}
+      {view === 'summary' && <Summary source={source} onUnauthorized={onSignOut} />}
       {view === 'receipt' && <ReceiptScreen onBack={() => setView('ledger')} />}
     </>
   )

@@ -1,22 +1,23 @@
-import type { PublisherReceipt } from '@contentledger/shared'
+import type { PublisherReceipt, PublisherSummary } from '@contentledger/shared'
 import { useCallback, useRef, useState } from 'react'
 import { type EdgeFlash, edgeId, FlowMap, MapBand } from '@/components/FlowMap'
-import { Column, FieldLabel, Figure, Section, SmallCaps } from '@/components/Primitives'
+import { Column, FieldLabel, Figure, Section } from '@/components/Primitives'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import { CONSUMER_TOTALS, type FeedSource, SETTLEMENT, summary } from '@/lib/api'
+import { useSummary } from '@/hooks/useSummary'
+import type { PublisherSource } from '@/lib/api'
 import { formatCount, formatUsdc } from '@/lib/format'
+import { COLOR } from '@/lib/theme'
 import { Feed } from '@/screens/Feed'
 
 interface LedgerProps {
-  readonly source: FeedSource
-  /** The band's aggregates are not yet read from the ledger, while the feed below is. */
-  readonly sampleBand: boolean
+  readonly source: PublisherSource
   readonly onUnauthorized?: () => void
   readonly onOpenReceipt?: () => void
 }
 
-export function Ledger({ source, sampleBand, onUnauthorized, onOpenReceipt }: LedgerProps) {
+export function Ledger({ source, onUnauthorized, onOpenReceipt }: LedgerProps) {
   const narrow = useIsNarrow()
+  const { summary } = useSummary(source, '7d', onUnauthorized)
   const [flash, setFlash] = useState<EdgeFlash | null>(null)
   const arrivedCount = useRef(0)
 
@@ -28,26 +29,31 @@ export function Ledger({ source, sampleBand, onUnauthorized, onOpenReceipt }: Le
   return (
     <>
       <MapBand>
-        {sampleBand && (
-          <div style={{ marginBottom: narrow ? 12 : 16 }}>
-            <SmallCaps muted>sample figures</SmallCaps>
+        <p
+          className="serif"
+          style={{
+            fontSize: narrow ? 18 : 21,
+            marginBottom: narrow ? 20 : 28,
+            color: summary === null ? COLOR.muted : COLOR.ink,
+          }}
+        >
+          {weekInBrief(summary)}
+        </p>
+        {summary !== null && summary.flows.length > 0 && (
+          <FlowMap summary={summary} flash={flash} title="Takings by AI system and by work" />
+        )}
+        {summary !== null && (
+          <div className="mt-8 flex flex-col items-end gap-6 md:mt-10 md:flex-row md:justify-end md:gap-16">
+            <div style={{ textAlign: 'right' }}>
+              <FieldLabel>Received, 7 days</FieldLabel>
+              <Figure value={formatUsdc(summary.total)} size={narrow ? 22 : 26} />
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <FieldLabel>Awaiting settlement</FieldLabel>
+              <Figure value={formatUsdc(summary.settlement.accrued)} size={narrow ? 22 : 26} />
+            </div>
           </div>
         )}
-        <p className="serif" style={{ fontSize: narrow ? 18 : 21, marginBottom: narrow ? 20 : 28 }}>
-          Over the last seven days, {formatCount(CONSUMER_TOTALS.length)} AI systems took{' '}
-          {formatCount(summary.count)} pieces of your work.
-        </p>
-        <FlowMap flash={flash} title="Takings by AI system and by work" />
-        <div className="mt-8 flex flex-col items-end gap-6 md:mt-10 md:flex-row md:justify-end md:gap-16">
-          <div style={{ textAlign: 'right' }}>
-            <FieldLabel>Received, 7 days</FieldLabel>
-            <Figure value={formatUsdc(summary.total)} size={narrow ? 22 : 26} />
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <FieldLabel>Awaiting settlement</FieldLabel>
-            <Figure value={formatUsdc(SETTLEMENT.accrued)} size={narrow ? 22 : 26} />
-          </div>
-        </div>
       </MapBand>
 
       <Column>
@@ -56,11 +62,20 @@ export function Ledger({ source, sampleBand, onUnauthorized, onOpenReceipt }: Le
             source={source}
             narrow={narrow}
             onUnauthorized={onUnauthorized}
-            onArrival={sampleBand ? undefined : onArrival}
+            onArrival={onArrival}
             onOpenReceipt={onOpenReceipt}
           />
         </Section>
       </Column>
     </>
   )
+}
+
+function weekInBrief(summary: PublisherSummary | null): string {
+  if (summary === null) return 'Reading the last seven days…'
+  if (summary.registeredWorks === 0) return 'No works are registered to this wallet yet.'
+  if (summary.count === 0) return 'Nothing of yours was taken in the last seven days.'
+  const systems = summary.byConsumer.length
+  const pieces = summary.count
+  return `Over the last seven days, ${formatCount(systems)} ${systems === 1 ? 'AI system' : 'AI systems'} took ${formatCount(pieces)} ${pieces === 1 ? 'piece' : 'pieces'} of your work.`
 }

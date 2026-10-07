@@ -8,7 +8,7 @@ import type { z } from 'zod'
 /**
  * Stand-in for the gateway until the dashboard reads it live. Only `api.ts` imports it.
  * The first half is wire JSON, exactly as `/v1/publisher/*` serves it; the second half
- * is what no endpoint serves yet, and leaves this file with the task that serves it.
+ * is the receipt screen, which no endpoint serves yet.
  */
 
 type WireReceipt = z.input<typeof publisherReceiptSchema>
@@ -251,9 +251,17 @@ export const INCOMING: readonly WireReceipt[] = [
 
 export const INCOMING_INTERVAL_MS = 4000
 
-/** `byWork` in the order the gateway sends it: by `sourceId`. */
+const flow = (agent: AgentKey, work: WorkKey, count: number, total: string) => ({
+  consumer: AGENT[agent],
+  workId: WORK[work],
+  count,
+  total,
+})
+
+/** In the order the gateway sends it: works by `sourceId`, consumers by amount, flows by consumer. */
 export const SUMMARY: z.input<typeof publisherSummarySchema> = {
   total: '4246900',
+  fee: '424880',
   count: 3536,
   byWork: [
     { workId: WORK.dryPort, sourceId: SOURCE.dryPort, count: 174, total: '369000' },
@@ -262,64 +270,27 @@ export const SUMMARY: z.input<typeof publisherSummarySchema> = {
     { workId: WORK.logs1974, sourceId: SOURCE.logs1974, count: 1210, total: '1070000' },
     { workId: WORK.sedimentCores, sourceId: SOURCE.sedimentCores, count: 72, total: '864000' },
   ],
+  byConsumer: [
+    { consumer: AGENT.corvid, count: 790, total: '2180000', paymentMethods: ['escrow'] },
+    { consumer: AGENT.meridian, count: 1770, total: '1188900', paymentMethods: ['escrow'] },
+    { consumer: AGENT.pallas, count: 912, total: '594000', paymentMethods: ['escrow'] },
+    { consumer: AGENT.halcyon, count: 64, total: '284000', paymentMethods: ['x402'] },
+  ],
+  flows: [
+    flow('corvid', 'saltLine', 420, '840000'),
+    flow('corvid', 'sedimentCores', 60, '720000'),
+    flow('corvid', 'logs1974', 310, '620000'),
+    flow('meridian', 'saltLine', 1240, '620000'),
+    flow('meridian', 'tideGauges', 380, '343900'),
+    flow('meridian', 'dryPort', 150, '225000'),
+    flow('pallas', 'sedimentCores', 12, '144000'),
+    flow('pallas', 'logs1974', 900, '450000'),
+    flow('halcyon', 'tideGauges', 40, '140000'),
+    flow('halcyon', 'dryPort', 24, '144000'),
+  ],
+  settlement: { inBatch: '3907900', accrued: '55000', perRequest: '284000' },
   registeredWorks: 5,
 }
-
-/* ------------------------------------------------- not served yet: T044 */
-
-export type PayMethod = 'escrow' | 'per request'
-
-export interface ConsumerTotal {
-  readonly consumer: string
-  readonly requests: number
-  readonly amount: bigint
-  readonly paysBy: PayMethod
-}
-
-/** Descending by amount. */
-export const CONSUMER_TOTALS: readonly ConsumerTotal[] = [
-  { consumer: AGENT.corvid, requests: 790, amount: 2180000n, paysBy: 'escrow' },
-  { consumer: AGENT.meridian, requests: 1770, amount: 1188900n, paysBy: 'escrow' },
-  { consumer: AGENT.pallas, requests: 912, amount: 594000n, paysBy: 'escrow' },
-  { consumer: AGENT.halcyon, requests: 64, amount: 284000n, paysBy: 'per request' },
-]
-
-export interface Edge {
-  readonly consumer: string
-  readonly workId: string
-  readonly requests: number
-  readonly amount: bigint
-}
-
-const edge = (agent: AgentKey, work: WorkKey, requests: number, amount: bigint): Edge => ({
-  consumer: AGENT[agent],
-  workId: WORK[work],
-  requests,
-  amount,
-})
-
-export const EDGES: readonly Edge[] = [
-  edge('corvid', 'saltLine', 420, 840000n),
-  edge('corvid', 'sedimentCores', 60, 720000n),
-  edge('corvid', 'logs1974', 310, 620000n),
-  edge('meridian', 'saltLine', 1240, 620000n),
-  edge('meridian', 'tideGauges', 380, 343900n),
-  edge('meridian', 'dryPort', 150, 225000n),
-  edge('pallas', 'sedimentCores', 12, 144000n),
-  edge('pallas', 'logs1974', 900, 450000n),
-  edge('halcyon', 'tideGauges', 40, 140000n),
-  edge('halcyon', 'dryPort', 24, 144000n),
-]
-
-export const PERIOD_LABEL = '28 August – 3 September 2026'
-export const PERIOD_PAID_BY_AGENTS = 4671780n
-export const PERIOD_PROTOCOL_FEE = 424880n
-
-export const SETTLEMENT = {
-  settled: 3907900n,
-  accrued: 55000n,
-  paidPerRequest: 284000n,
-} as const
 
 /* --------------------------- not served yet: receipt screen on /v1/receipts/:id */
 

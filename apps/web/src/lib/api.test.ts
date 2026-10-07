@@ -2,43 +2,43 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
   authApiFor,
-  CONSUMER_TOTALS,
   dataModeOf,
-  EDGES,
   type FeedEvent,
   publisherApiFor,
-  sampleFeed,
-  summary,
+  sampleSource,
+  sampleSummary,
 } from './api'
+import { SUMMARY } from './mock'
 
 const sum = (amounts: readonly bigint[]) => amounts.reduce((total, amount) => total + amount, 0n)
 
 describe('served data', () => {
   it('arrives through the shared contract, money as bigint', async () => {
-    const page = await sampleFeed.receipts(null, new AbortController().signal)
+    const page = await sampleSource.receipts(null, new AbortController().signal)
     expect(typeof page.items[0]?.tariff).toBe('bigint')
-    expect(summary.total).toBe(4_246_900n)
+    expect(sampleSummary.total).toBe(4_246_900n)
   })
 
   it('adds up the same however the period is cut', () => {
-    expect(sum(summary.byWork.map((work) => work.total))).toBe(summary.total)
-    expect(sum(CONSUMER_TOTALS.map((consumer) => consumer.amount))).toBe(summary.total)
-    expect(sum(EDGES.map((edge) => edge.amount))).toBe(summary.total)
-    expect(CONSUMER_TOTALS.reduce((n, consumer) => n + consumer.requests, 0)).toBe(summary.count)
-    expect(EDGES.reduce((n, edge) => n + edge.requests, 0)).toBe(summary.count)
+    const { total, count, byWork, byConsumer, flows, settlement } = sampleSummary
+    for (const cut of [byWork, byConsumer, flows]) {
+      expect(sum(cut.map((part) => part.total))).toBe(total)
+      expect(cut.reduce((n, part) => n + part.count, 0)).toBe(count)
+    }
+    expect(settlement.inBatch + settlement.accrued + settlement.perRequest).toBe(total)
   })
 
-  it('draws every edge between an agent and a work the period knows', () => {
-    const agents = new Set(CONSUMER_TOTALS.map((consumer) => consumer.consumer))
-    const works = new Set(summary.byWork.map((work) => work.workId))
-    for (const edge of EDGES) {
-      expect(agents.has(edge.consumer)).toBe(true)
-      expect(works.has(edge.workId)).toBe(true)
+  it('draws every flow between an agent and a work the period knows', () => {
+    const agents = new Set(sampleSummary.byConsumer.map((consumer) => consumer.consumer))
+    const works = new Set(sampleSummary.byWork.map((work) => work.workId))
+    for (const flow of sampleSummary.flows) {
+      expect(agents.has(flow.consumer)).toBe(true)
+      expect(works.has(flow.workId)).toBe(true)
     }
   })
 })
 
-describe('sampleFeed.stream', () => {
+describe('sampleSource.stream', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -48,7 +48,7 @@ describe('sampleFeed.stream', () => {
 
   it('is ready at once, delivers arrivals one at a time, then falls silent', () => {
     const seen: string[] = []
-    void sampleFeed.stream(
+    void sampleSource.stream(
       (event) => seen.push(event.type === 'receipt' ? event.receipt.tariff.toString() : event.type),
       new AbortController().signal,
     )
@@ -68,7 +68,7 @@ describe('sampleFeed.stream', () => {
   it('stops delivering once aborted, and ends with the abort', async () => {
     const seen: FeedEvent[] = []
     const controller = new AbortController()
-    const ended = sampleFeed.stream((event) => seen.push(event), controller.signal)
+    const ended = sampleSource.stream((event) => seen.push(event), controller.signal)
     vi.advanceTimersByTime(4000)
     controller.abort()
     vi.runAllTimers()
@@ -166,6 +166,44 @@ describe('publisherApiFor', () => {
     const [url, init] = fetcher.mock.calls[0] ?? []
     expect(url).toBe('/v1/publisher/stream')
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer tok')
+  })
+
+  it('reads the summary of a period with the session token', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(SUMMARY)))
+    const period = {
+      from: new Date('2026-09-30T09:30:00.000Z'),
+      to: new Date('2026-10-07T09:30:00.000Z'),
+    }
+
+    const summary = await publisherApiFor('https://gw.example', 'tok', fetcher).summary(
+      period,
+      signal,
+    )
+
+    expect(summary.settlement.accrued).toBe(55_000n)
+    const [url, init] = fetcher.mock.calls[0] ?? []
+    expect(url).toBe(
+      'https://gw.example/v1/publisher/summary?from=2026-09-30T09%3A30%3A00.000Z&to=2026-10-07T09%3A30%3A00.000Z',
+    )
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer tok')
+    expect(init?.signal).toBe(signal)
+  })
+
+  it('rejects a summary that breaks the contract, and carries a refusal', async () => {
+    const broken = publisherApiFor('', 'tok', async () =>
+      Response.json({ ...SUMMARY, settlement: undefined }),
+    )
+    await expect(broken.summary({ from: new Date(0), to: new Date(1) }, signal)).rejects.toThrow()
+
+    const limited = publisherApiFor('', 'tok', async () =>
+      Response.json(
+        { error: { code: 'RATE_LIMITED', message: 'x', details: { retryAfter: 2 } } },
+        { status: 429 },
+      ),
+    )
+    await expect(limited.summary({ from: new Date(0), to: new Date(1) }, signal)).rejects.toEqual(
+      new ApiError(429, 'RATE_LIMITED', 2),
+    )
   })
 
   it('ends with an error when an event breaks the contract', async () => {

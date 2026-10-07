@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { edgeId, FlowMap, MapBand } from '@/components/FlowMap'
 import { Column, Line } from '@/components/Primitives'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import { INCLUSION_PATH, RECEIPT, VERIFY_STEPS } from '@/lib/api'
+import { INCLUSION_PATH, RECEIPT, sampleSummary, VERIFY_STEPS } from '@/lib/api'
 import { formatUsdc, workPath } from '@/lib/format'
 import { COLOR } from '@/lib/theme'
 
@@ -38,6 +38,7 @@ export function ReceiptScreen({ onBack }: { onBack: () => void }) {
 
       <MapBand>
         <FlowMap
+          summary={sampleSummary}
           soloEdgeId={edgeId(RECEIPT.consumer, RECEIPT.workId)}
           title="This receipt within the period"
         />

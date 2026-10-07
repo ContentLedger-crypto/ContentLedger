@@ -3,6 +3,7 @@ import { usdcAmountSchema, useTypeSchema } from './money.js'
 import { base58KeySchema, hex256Schema, utcInstantSchema } from './voucher.js'
 
 const countSchema = z.number().int().min(0)
+const paymentMethodSchema = z.enum(['escrow', 'x402'])
 
 export const publisherReceiptSchema = z.object({
   id: hex256Schema,
@@ -11,7 +12,7 @@ export const publisherReceiptSchema = z.object({
   consumer: base58KeySchema,
   useType: useTypeSchema,
   tariff: usdcAmountSchema,
-  paymentMethod: z.enum(['escrow', 'x402']),
+  paymentMethod: paymentMethodSchema,
   acceptedAt: utcInstantSchema,
   /** When the money moved: the batch for escrow, the payment itself for x402. */
   settledAt: utcInstantSchema.nullable(),
@@ -23,7 +24,9 @@ export const receiptsPageSchema = z.object({
 })
 
 export const publisherSummarySchema = z.object({
+  /** What the publisher receives: the rates, without the fee charged on top of them. */
   total: usdcAmountSchema,
+  fee: usdcAmountSchema,
   count: countSchema,
   byWork: z.array(
     z.object({
@@ -33,6 +36,29 @@ export const publisherSummarySchema = z.object({
       total: usdcAmountSchema,
     }),
   ),
+  byConsumer: z.array(
+    z.object({
+      consumer: base58KeySchema,
+      count: countSchema,
+      total: usdcAmountSchema,
+      paymentMethods: z.array(paymentMethodSchema).min(1),
+    }),
+  ),
+  /** One per consumer and work that met in the period. */
+  flows: z.array(
+    z.object({
+      consumer: base58KeySchema,
+      workId: base58KeySchema,
+      count: countSchema,
+      total: usdcAmountSchema,
+    }),
+  ),
+  /** Splits `total` by where the money stands now, not where it stood at the period's end. */
+  settlement: z.object({
+    inBatch: usdcAmountSchema,
+    accrued: usdcAmountSchema,
+    perRequest: usdcAmountSchema,
+  }),
   /** `null` — the chain was not read, which is not the same as "nothing registered". */
   registeredWorks: countSchema.nullable(),
 })

@@ -1,5 +1,5 @@
 import { acceptedAtColumns, domains, receipts, works } from '@contentledger/db'
-import type { publisherReceiptSchema } from '@contentledger/shared'
+import type { publisherReceiptSchema, publisherSummarySchema } from '@contentledger/shared'
 import { and, asc, desc, eq, gte, lt, type SQL, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import type { SessionWallet } from '../routes/auth.js'
@@ -82,28 +82,103 @@ export async function listReceipts(db: Database, wallet: SessionWallet, params: 
   return { items, nextCursor }
 }
 
+// One grouped read at the finest grain any table on the summary needs; the tables are
+// folded from it, so their totals cannot disagree with one another.
 export async function summarize(db: Database, wallet: SessionWallet, { from, to }: SummaryParams) {
   const rows = await db
     .select({
       workId: works.id,
       sourceId: works.sourceId,
+      consumer: receipts.consumer,
+      paymentMethod: receipts.paymentMethod,
+      settled: sql<boolean>`${receipts.settledAt} is not null`,
       count: sql<number>`count(*)::int`,
       total: sql<string>`sum(${receipts.tariff})::text`,
+      fee: sql<string>`sum(${receipts.fee})::text`,
     })
     .from(receipts)
     .innerJoin(works, eq(receipts.workId, works.id))
     .innerJoin(domains, ownedBy(wallet))
     .where(and(gte(receipts.acceptedTs, from), lt(receipts.acceptedTs, to)))
-    .groupBy(works.id, works.sourceId)
-    .orderBy(asc(works.sourceId))
+    .groupBy(
+      works.id,
+      works.sourceId,
+      receipts.consumer,
+      receipts.paymentMethod,
+      sql`${receipts.settledAt} is not null`,
+    )
 
-  const byWork = rows.map((row) => ({ ...row, total: BigInt(row.total) }))
+  return summaryOf(rows.map((row) => ({ ...row, total: BigInt(row.total), fee: BigInt(row.fee) })))
+}
+
+type PaymentMethod = ReceiptItem['paymentMethod']
+
+interface SummaryCell {
+  workId: string
+  sourceId: string
+  consumer: string
+  paymentMethod: PaymentMethod
+  settled: boolean
+  count: number
+  total: bigint
+  fee: bigint
+}
+
+interface Tally {
+  count: number
+  total: bigint
+}
+
+export function summaryOf(cells: SummaryCell[]) {
+  const byWork = new Map<string, Tally & { workId: string; sourceId: string }>()
+  const byConsumer = new Map<string, Tally & { consumer: string; methods: Set<PaymentMethod> }>()
+  const flows = new Map<string, Tally & { consumer: string; workId: string; sourceId: string }>()
+  const settlement = { inBatch: 0n, accrued: 0n, perRequest: 0n }
+  let fee = 0n
+
+  for (const cell of cells) {
+    const { workId, sourceId, consumer } = cell
+    add(byWork, workId, cell, () => ({ workId, sourceId, ...NONE }))
+    add(byConsumer, consumer, cell, () => ({ consumer, methods: new Set(), ...NONE })).methods.add(
+      cell.paymentMethod,
+    )
+    add(flows, `${consumer}~${workId}`, cell, () => ({ consumer, workId, sourceId, ...NONE }))
+    fee += cell.fee
+    const standing =
+      cell.paymentMethod === 'x402' ? 'perRequest' : cell.settled ? 'inBatch' : 'accrued'
+    settlement[standing] += cell.total
+  }
+
+  const works = [...byWork.values()].sort((a, b) => compare(a.sourceId, b.sourceId))
   return {
-    total: byWork.reduce((sum, work) => sum + work.total, 0n),
-    count: byWork.reduce((sum, work) => sum + work.count, 0),
-    byWork,
+    total: works.reduce((sum, work) => sum + work.total, 0n),
+    fee,
+    count: works.reduce((sum, work) => sum + work.count, 0),
+    byWork: works,
+    byConsumer: [...byConsumer.values()]
+      .sort((a, b) => compare(b.total, a.total) || compare(a.consumer, b.consumer))
+      .map(({ methods, ...consumer }) => ({
+        ...consumer,
+        paymentMethods: [...methods].sort(compare),
+      })),
+    flows: [...flows.values()]
+      .sort((a, b) => compare(a.consumer, b.consumer) || compare(a.sourceId, b.sourceId))
+      .map(({ sourceId: _, ...flow }) => flow),
+    settlement,
   }
 }
+
+const NONE: Tally = { count: 0, total: 0n }
+
+function add<T extends Tally>(tallies: Map<string, T>, key: string, cell: Tally, empty: () => T) {
+  const tally = tallies.get(key) ?? empty()
+  tally.count += cell.count
+  tally.total += cell.total
+  tallies.set(key, tally)
+  return tally
+}
+
+const compare = <T extends string | bigint>(a: T, b: T) => (a < b ? -1 : a > b ? 1 : 0)
 
 export type ReceiptItem = Awaited<ReturnType<typeof listReceipts>>['items'][number]
 
@@ -113,6 +188,30 @@ export const receiptJson = (item: ReceiptItem) =>
     tariff: item.tariff.toString(),
     settledAt: item.settledAt?.toISOString() ?? null,
   }) satisfies z.input<typeof publisherReceiptSchema>
+
+const money = <T extends { total: bigint }>(tally: T) => ({
+  ...tally,
+  total: tally.total.toString(),
+})
+
+export const summaryJson = (
+  summary: Awaited<ReturnType<typeof summarize>>,
+  registeredWorks: number | null,
+) =>
+  ({
+    total: summary.total.toString(),
+    fee: summary.fee.toString(),
+    count: summary.count,
+    byWork: summary.byWork.map(money),
+    byConsumer: summary.byConsumer.map(money),
+    flows: summary.flows.map(money),
+    settlement: {
+      inBatch: summary.settlement.inBatch.toString(),
+      accrued: summary.settlement.accrued.toString(),
+      perRequest: summary.settlement.perRequest.toString(),
+    },
+    registeredWorks,
+  }) satisfies z.input<typeof publisherSummarySchema>
 
 /**
  * The receipts a live event is about, each with the one wallet allowed to see it: the

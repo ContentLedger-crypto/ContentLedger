@@ -1,6 +1,7 @@
 import {
   authChallengeSchema,
   type PublisherReceipt,
+  type PublisherSummary,
   publisherReceiptSchema,
   publisherSummarySchema,
   type ReceiptsPage,
@@ -118,14 +119,35 @@ export interface FeedSource {
   stream(onEvent: (event: FeedEvent) => void, signal: AbortSignal): Promise<void>
 }
 
+export interface PeriodWindow {
+  readonly from: Date
+  readonly to: Date
+}
+
+export interface SummarySource {
+  summary(period: PeriodWindow, signal: AbortSignal): Promise<PublisherSummary>
+}
+
+export type PublisherSource = FeedSource & SummarySource
+
 export function publisherApiFor(
   apiUrl: string,
   token: string,
   fetcher: typeof fetch = defaultFetch,
-): FeedSource {
+): PublisherSource {
   const authorization = { Authorization: `Bearer ${token}` }
 
   return {
+    async summary({ from, to }, signal) {
+      const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() })
+      const response = await fetcher(`${apiUrl}/v1/publisher/summary?${query}`, {
+        headers: authorization,
+        signal,
+      })
+      if (!response.ok) throw await refusalOf(response)
+      return publisherSummarySchema.parse(await response.json())
+    },
+
     async receipts(cursor, signal) {
       const query = cursor === null ? '' : `?${new URLSearchParams({ cursor })}`
       const response = await fetcher(`${apiUrl}/v1/publisher/receipts${query}`, {
@@ -167,8 +189,14 @@ function feedEventOf(name: string, data: string): FeedEvent | null {
   }
 }
 
-/** The preview's feed: one page, then six arrivals four seconds apart, then silence. */
-export const sampleFeed: FeedSource = {
+export const sampleSummary = publisherSummarySchema.parse(SUMMARY)
+
+/**
+ * The preview's ledger: one page, then six arrivals four seconds apart, then silence. The
+ * summary is the same sample whatever the period: the preview has no history to cut.
+ */
+export const sampleSource: PublisherSource = {
+  summary: async () => sampleSummary,
   receipts: async () => receiptsPageSchema.parse(RECEIPTS),
   stream: (onEvent, signal) =>
     new Promise((_, reject) => {
@@ -188,18 +216,4 @@ export const sampleFeed: FeedSource = {
     }),
 }
 
-export const summary = publisherSummarySchema.parse(SUMMARY)
-
-export {
-  CONSUMER_TOTALS,
-  type ConsumerTotal,
-  EDGES,
-  type Edge,
-  INCLUSION_PATH,
-  PERIOD_LABEL,
-  PERIOD_PAID_BY_AGENTS,
-  PERIOD_PROTOCOL_FEE,
-  RECEIPT,
-  SETTLEMENT,
-  VERIFY_STEPS,
-} from './mock'
+export { INCLUSION_PATH, RECEIPT, VERIFY_STEPS } from './mock'

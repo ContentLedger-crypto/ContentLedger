@@ -1,4 +1,4 @@
-import type { publisherSummarySchema, receiptsPageSchema } from '@contentledger/shared'
+import type { receiptsPageSchema } from '@contentledger/shared'
 import { type Context, Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { z } from 'zod'
@@ -10,6 +10,7 @@ import {
   receiptJson,
   receiptsParams,
   summarize,
+  summaryJson,
   summaryParams,
 } from '../publisher/queries.js'
 import type { RateLimiter } from '../rate-limit.js'
@@ -86,12 +87,7 @@ export function publisherRoutes({
         return null
       }),
     ])
-    return c.json({
-      total: summary.total.toString(),
-      count: summary.count,
-      byWork: summary.byWork.map((work) => ({ ...work, total: work.total.toString() })),
-      registeredWorks,
-    } satisfies z.input<typeof publisherSummarySchema>)
+    return c.json(summaryJson(summary, registeredWorks))
   })
 
   app.get(

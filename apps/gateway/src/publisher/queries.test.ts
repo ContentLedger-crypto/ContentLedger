@@ -6,7 +6,14 @@ import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { SessionWallet } from '../routes/auth.js'
-import { listReceipts, PAGE_SIZE, receiptsParams, summarize, summaryParams } from './queries.js'
+import {
+  listReceipts,
+  PAGE_SIZE,
+  receiptsParams,
+  summarize,
+  summaryOf,
+  summaryParams,
+} from './queries.js'
 
 const key = (seed: number) => new PublicKey(new Uint8Array(32).fill(seed)).toBase58()
 const session = (seed: number) => key(seed) as SessionWallet
@@ -72,7 +79,12 @@ function workRow(id: string, host: string, sourceId: string) {
   }
 }
 
-function receiptRow(workId: string, acceptedAt: string, tariff: bigint) {
+function receiptRow(
+  workId: string,
+  acceptedAt: string,
+  tariff: bigint,
+  extra: Partial<typeof receipts.$inferInsert> = {},
+) {
   nextReceipt += 1
   return {
     id: nextReceipt.toString(16).padStart(64, '0'),
@@ -88,8 +100,17 @@ function receiptRow(workId: string, acceptedAt: string, tariff: bigint) {
     paymentMethod: 'escrow' as const,
     paymentRef: null,
     ...acceptedAtColumns(acceptedAt),
+    ...extra,
   }
 }
+
+const SECOND_AGENT = key(8)
+
+const paidPerRequest = (seed: number) => ({
+  paymentMethod: 'x402' as const,
+  paymentRef: key(100 + seed),
+  settledAt: new Date(at(seed)),
+})
 
 const at = (minute: number) => new Date(Date.UTC(2026, 9, 6, 12, minute)).toISOString()
 
@@ -225,13 +246,85 @@ describe('summarize', () => {
     expect(summary.byWork.map((w) => w.workId)).toEqual([key(11)])
   })
 
+  it('splits the period by consumer and by consumer and work, with the fee alongside', async () => {
+    await db
+      .insert(receipts)
+      .values([
+        receiptRow(key(11), at(1), 2000n, { fee: 200n }),
+        receiptRow(key(12), at(2), 500n, { fee: 50n }),
+        receiptRow(key(11), at(3), 2000n, { fee: 200n, consumer: SECOND_AGENT }),
+        receiptRow(key(11), at(4), 3000n, { fee: 300n, consumer: SECOND_AGENT }),
+      ])
+
+    const summary = await summarize(db, session(ALICE), range(at(0), at(59)))
+
+    expect(summary.fee).toBe(750n)
+    expect(summary.byConsumer).toEqual([
+      { consumer: SECOND_AGENT, count: 2, total: 5000n, paymentMethods: ['escrow'] },
+      { consumer: AGENT, count: 2, total: 2500n, paymentMethods: ['escrow'] },
+    ])
+    expect(summary.flows).toEqual(
+      expect.arrayContaining([
+        { consumer: AGENT, workId: key(11), count: 1, total: 2000n },
+        { consumer: AGENT, workId: key(12), count: 1, total: 500n },
+        { consumer: SECOND_AGENT, workId: key(11), count: 2, total: 5000n },
+      ]),
+    )
+    expect(summary.flows).toHaveLength(3)
+  })
+
+  it('splits the total by where the money stands: in a batch, accrued, or paid per request', async () => {
+    await db
+      .insert(receipts)
+      .values([
+        receiptRow(key(11), at(1), 2000n, { settledAt: new Date(at(2)) }),
+        receiptRow(key(11), at(3), 700n),
+        receiptRow(key(12), at(4), 500n, paidPerRequest(4)),
+        receiptRow(key(12), at(5), 40n, paidPerRequest(5)),
+      ])
+
+    const summary = await summarize(db, session(ALICE), range(at(0), at(59)))
+
+    expect(summary.settlement).toEqual({ inBatch: 2000n, accrued: 700n, perRequest: 540n })
+    expect(summary.byConsumer).toEqual([
+      { consumer: AGENT, count: 4, total: 3240n, paymentMethods: ['escrow', 'x402'] },
+    ])
+    expect(summary.byWork.map((w) => [w.workId, w.count, w.total])).toEqual([
+      [key(11), 2, 2700n],
+      [key(12), 2, 540n],
+    ])
+  })
+
+  it('orders consumers with equal totals by address, so the order does not flicker', () => {
+    // The grouped rows come in no promised order, so the fold is fed them backwards.
+    const agents = [AGENT, SECOND_AGENT, key(7)].sort()
+    const summary = summaryOf(
+      agents.toReversed().map((consumer) => ({
+        workId: key(11),
+        sourceId: 'https://alice.test/a',
+        consumer,
+        paymentMethod: 'escrow',
+        settled: false,
+        count: 1,
+        total: 2000n,
+        fee: 10n,
+      })),
+    )
+
+    expect(summary.byConsumer.map((c) => c.consumer)).toEqual(agents)
+  })
+
   it('returns zero for a wallet that owns nothing', async () => {
     await db.insert(receipts).values(receiptRow(key(11), at(1), 2000n))
 
     expect(await summarize(db, session(NOBODY), range(at(0), at(59)))).toEqual({
       total: 0n,
+      fee: 0n,
       count: 0,
       byWork: [],
+      byConsumer: [],
+      flows: [],
+      settlement: { inBatch: 0n, accrued: 0n, perRequest: 0n },
     })
   })
 })

@@ -1,113 +1,154 @@
+import type { PublisherSummary } from '@contentledger/shared'
+import { useState } from 'react'
 import { FlowMap, MapBand } from '@/components/FlowMap'
 import { Column, FieldLabel, Figure, Section } from '@/components/Primitives'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import {
-  CONSUMER_TOTALS,
-  PERIOD_LABEL,
-  PERIOD_PAID_BY_AGENTS,
-  PERIOD_PROTOCOL_FEE,
-  SETTLEMENT,
-  summary,
-} from '@/lib/api'
+import { useSummary } from '@/hooks/useSummary'
+import type { PublisherSource } from '@/lib/api'
+import type { Link } from '@/lib/follow'
 import { formatCount, formatUsdc, shareOf, truncateMiddle, workPath } from '@/lib/format'
+import { byTotalDescending, PERIODS, type Period, periodLabel, periodWindow } from '@/lib/summary'
 import { COLOR } from '@/lib/theme'
 
 const FEE_PROSE =
   'The fee is charged on top of the rate you set. You receive the rate you set, exactly.'
 const ACCRUAL_PROSE = 'Accrued takings are paid out in the next batch, about once a minute.'
 
-const WORK_TOTALS = [...summary.byWork].sort((a, b) =>
-  a.total === b.total ? 0 : a.total > b.total ? -1 : 1,
-)
+interface SummaryProps {
+  readonly source: PublisherSource
+  readonly onUnauthorized?: () => void
+}
 
-const PERIOD_CHOICES: readonly { readonly label: string; readonly current: boolean }[] = [
-  { label: '7 days', current: true },
-  { label: '30 days', current: false },
-  { label: 'All', current: false },
-]
-
-export function Summary() {
+export function Summary({ source, onUnauthorized }: SummaryProps) {
   const narrow = useIsNarrow()
+  const [period, setPeriod] = useState<Period>('7d')
+  const { summary, link } = useSummary(source, period, onUnauthorized)
 
   return (
     <>
       <MapBand>
         <div className="mb-6 flex flex-col gap-2 md:mb-8 md:flex-row md:items-baseline md:justify-between">
           <p className="serif" style={{ fontSize: narrow ? 18 : 21 }}>
-            {PERIOD_LABEL}
+            {periodLabel(periodWindow(period, new Date()))}
           </p>
-          <div className="flex items-baseline gap-5">
-            {PERIOD_CHOICES.map((choice) => (
-              <span
-                key={choice.label}
-                className="serif"
+          <fieldset className="m-0 flex items-baseline gap-5 border-0 p-0" aria-label="Period">
+            {PERIODS.map((choice) => (
+              <button
+                key={choice.period}
+                type="button"
+                className="serif navitem"
+                aria-pressed={choice.period === period}
+                onClick={() => setPeriod(choice.period)}
                 style={{
                   fontSize: 14,
-                  color: choice.current ? COLOR.sage : COLOR.muted,
+                  color: choice.period === period ? COLOR.sage : COLOR.muted,
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
                 }}
               >
                 {choice.label}
-              </span>
+              </button>
             ))}
-          </div>
+          </fieldset>
         </div>
-        <FlowMap title="Takings by AI system and by work" />
+        {summary !== null && summary.flows.length > 0 ? (
+          <FlowMap summary={summary} title="Takings by AI system and by work" />
+        ) : (
+          <Quiet>{periodInBrief(summary, link)}</Quiet>
+        )}
       </MapBand>
 
-      <Column>
-        <Section>
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-10">
-            <div>
-              <FieldLabel>Received</FieldLabel>
-              <Figure value={formatUsdc(summary.total)} size={narrow ? 24 : 30} align="left" />
+      {summary !== null && (
+        <Column>
+          <Section>
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-10">
+              <div>
+                <FieldLabel>Received</FieldLabel>
+                <Figure value={formatUsdc(summary.total)} size={narrow ? 24 : 30} align="left" />
+              </div>
+              <div>
+                <FieldLabel>Paid by agents</FieldLabel>
+                <Figure
+                  value={formatUsdc(summary.total + summary.fee)}
+                  size={narrow ? 24 : 30}
+                  align="left"
+                />
+              </div>
+              <div>
+                <FieldLabel>Protocol fee</FieldLabel>
+                <Figure value={formatUsdc(summary.fee)} size={narrow ? 24 : 30} align="left" />
+              </div>
             </div>
-            <div>
-              <FieldLabel>Paid by agents</FieldLabel>
-              <Figure
-                value={formatUsdc(PERIOD_PAID_BY_AGENTS)}
-                size={narrow ? 24 : 30}
-                align="left"
-              />
-            </div>
-            <div>
-              <FieldLabel>Protocol fee</FieldLabel>
-              <Figure
-                value={formatUsdc(PERIOD_PROTOCOL_FEE)}
-                size={narrow ? 24 : 30}
-                align="left"
-              />
-            </div>
-          </div>
-          <p className="serif mt-7" style={{ color: COLOR.muted, fontSize: 16, maxWidth: 640 }}>
-            {FEE_PROSE}
-          </p>
-        </Section>
+            <p className="serif mt-7" style={{ color: COLOR.muted, fontSize: 16, maxWidth: 640 }}>
+              {FEE_PROSE}
+            </p>
+          </Section>
 
-        <Section ruled>
-          <ByWork narrow={narrow} />
-          <div style={{ height: 48 }} />
-          <ByConsumer narrow={narrow} />
-        </Section>
+          {summary.count > 0 && (
+            <>
+              <Section ruled>
+                <ByWork summary={summary} narrow={narrow} />
+                <div style={{ height: 48 }} />
+                <ByConsumer summary={summary} narrow={narrow} />
+              </Section>
 
-        <Section ruled>
-          <h2
-            className="serif"
-            style={{ fontSize: narrow ? 22 : 28, fontWeight: 400, marginBottom: 20 }}
-          >
-            Settlement
-          </h2>
-          <div style={{ borderTop: `1px solid ${COLOR.hairline}`, maxWidth: 560 }}>
-            <SettleLine label="Settled" value={formatUsdc(SETTLEMENT.settled)} />
-            <SettleLine label="Accrued" value={formatUsdc(SETTLEMENT.accrued)} />
-            <SettleLine label="Paid per request" value={formatUsdc(SETTLEMENT.paidPerRequest)} />
-          </div>
-          <p className="serif mt-6" style={{ color: COLOR.muted, fontSize: 16 }}>
-            {ACCRUAL_PROSE}
-          </p>
-        </Section>
-      </Column>
+              <Section ruled>
+                <h2
+                  className="serif"
+                  style={{ fontSize: narrow ? 22 : 28, fontWeight: 400, marginBottom: 20 }}
+                >
+                  Settlement
+                </h2>
+                <div style={{ borderTop: `1px solid ${COLOR.hairline}`, maxWidth: 560 }}>
+                  <SettleLine
+                    label="Settled in batch"
+                    value={formatUsdc(summary.settlement.inBatch)}
+                  />
+                  <SettleLine label="Accrued" value={formatUsdc(summary.settlement.accrued)} />
+                  <SettleLine
+                    label="Paid per request"
+                    value={formatUsdc(summary.settlement.perRequest)}
+                  />
+                </div>
+                <p className="serif mt-6" style={{ color: COLOR.muted, fontSize: 16 }}>
+                  {ACCRUAL_PROSE}
+                </p>
+              </Section>
+            </>
+          )}
+        </Column>
+      )}
     </>
   )
+}
+
+function periodInBrief(summary: PublisherSummary | null, link: Link): string {
+  if (summary === null) {
+    return link === 'reconnecting'
+      ? 'The gateway cannot be reached. Trying again.'
+      : 'Reading the ledger…'
+  }
+  if (summary.registeredWorks === 0) {
+    return 'No works are registered to this wallet yet. Once one is, what AI systems pay for it is summed here.'
+  }
+  return 'Nothing of yours was taken in this period.'
+}
+
+function Quiet({ children }: { children: string }) {
+  return (
+    <p className="serif" style={{ color: COLOR.muted, fontSize: 16, lineHeight: 1.5 }}>
+      {children}
+    </p>
+  )
+}
+
+type PaymentMethod = PublisherSummary['byConsumer'][number]['paymentMethods'][number]
+
+const PAID_BY: Readonly<Record<PaymentMethod, string>> = {
+  escrow: 'escrow',
+  x402: 'per request',
 }
 
 function SettleLine({ label, value }: { label: string; value: string }) {
@@ -154,7 +195,7 @@ function TableHead({ columns, template }: { columns: readonly string[]; template
 
 const WORK_TEMPLATE = 'minmax(0,1fr) 110px 160px 90px'
 
-function ByWork({ narrow }: { narrow: boolean }) {
+function ByWork({ summary, narrow }: { summary: PublisherSummary; narrow: boolean }) {
   return (
     <div>
       <h2
@@ -167,7 +208,7 @@ function ByWork({ narrow }: { narrow: boolean }) {
         {!narrow && (
           <TableHead template={WORK_TEMPLATE} columns={['Work', 'Requests', 'Amount', 'Share']} />
         )}
-        {WORK_TOTALS.map((total) => {
+        {[...summary.byWork].sort(byTotalDescending).map((total) => {
           const share = shareOf(total.total, summary.total) ?? '—'
           const titleCell = (
             <div className="serif min-w-0 truncate" style={{ fontSize: 16 }} title={total.sourceId}>
@@ -245,7 +286,7 @@ function ByWork({ narrow }: { narrow: boolean }) {
 
 const CONSUMER_TEMPLATE = 'minmax(0,1fr) 110px 170px 140px'
 
-function ByConsumer({ narrow }: { narrow: boolean }) {
+function ByConsumer({ summary, narrow }: { summary: PublisherSummary; narrow: boolean }) {
   return (
     <div>
       <h2
@@ -261,7 +302,8 @@ function ByConsumer({ narrow }: { narrow: boolean }) {
             columns={['Consumer', 'Requests', 'Amount', 'Paid by']}
           />
         )}
-        {CONSUMER_TOTALS.map((total) => {
+        {summary.byConsumer.map((total) => {
+          const paidBy = total.paymentMethods.map((method) => PAID_BY[method]).join(', ')
           if (narrow) {
             return (
               <div
@@ -272,9 +314,9 @@ function ByConsumer({ narrow }: { narrow: boolean }) {
                 <div className="mono" title={total.consumer}>
                   {truncateMiddle(total.consumer, 20)}
                 </div>
-                <StackedPair label="Requests" value={formatCount(total.requests)} />
-                <StackedPair label="Amount" value={formatUsdc(total.amount)} />
-                <StackedPair label="Paid by" value={total.paysBy} serifValue />
+                <StackedPair label="Requests" value={formatCount(total.count)} />
+                <StackedPair label="Amount" value={formatUsdc(total.total)} />
+                <StackedPair label="Paid by" value={paidBy} serifValue />
               </div>
             )
           }
@@ -292,16 +334,16 @@ function ByConsumer({ narrow }: { narrow: boolean }) {
                 {total.consumer}
               </span>
               <span className="fig" style={{ fontSize: 15 }}>
-                {formatCount(total.requests)}
+                {formatCount(total.count)}
               </span>
               <span className="fig" style={{ fontSize: 15 }}>
-                {formatUsdc(total.amount)}
+                {formatUsdc(total.total)}
               </span>
               <span
                 className="serif"
                 style={{ fontSize: 15, color: COLOR.muted, textAlign: 'right' }}
               >
-                {total.paysBy}
+                {paidBy}
               </span>
             </div>
           )
