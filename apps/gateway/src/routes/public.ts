@@ -2,12 +2,14 @@ import { batches, receipts, vouchers } from '@contentledger/db'
 import {
   merkleProof,
   merkleRoot,
+  type publicLatestBatchSchema,
   type ReceiptBody,
   receiptId,
   receiptLeaf,
 } from '@contentledger/shared'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { z } from 'zod'
 import { apiError } from '../errors.js'
 import type { Database } from '../store.js'
@@ -17,6 +19,8 @@ type ReceiptRow = typeof receipts.$inferSelect
 
 // A settled batch and an anchored receipt never change; a pending one is about to.
 const IMMUTABLE = 'public, max-age=31536000, immutable'
+// The newest batch moves on with every settler pass that has work.
+const LATEST = 'public, max-age=30'
 
 const batchParams = z.object({
   consumer: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/),
@@ -38,6 +42,27 @@ const invalid = (c: Context, error: z.ZodError) =>
  */
 export function publicRoutes(db: Database): Hono {
   const app = new Hono()
+
+  // Any origin, unlike the session routes: these carry no credentials, and a verifier
+  // or a page outside the dashboard has the same right to read them.
+  for (const path of ['/v1/receipts/*', '/v1/batches/*']) {
+    app.use(path, cors({ origin: '*', allowMethods: ['GET'] }))
+  }
+
+  // What settled last, for a reader who wants to see the rail move, not to verify:
+  // the signature is the part to check, on the chain.
+  app.get('/v1/batches/latest', async (c) => {
+    const [batch] = await db.select().from(batches).orderBy(desc(batches.publishedAt)).limit(1)
+    if (batch === undefined) return c.json(apiError('NOT_FOUND', 'no batch yet', {}), 404)
+    c.header('Cache-Control', LATEST)
+    return c.json({
+      consumer: batch.consumer,
+      seqTo: Number(batch.seqTo),
+      txSig: batch.txSig,
+      publishedAt: batch.publishedAt.toISOString(),
+      receipts: Number(batch.seqTo - batch.seqFrom + 1n),
+    } satisfies z.input<typeof publicLatestBatchSchema>)
+  })
 
   app.get('/v1/batches/:consumer/:seqTo', async (c) => {
     const params = batchParams.safeParse(c.req.param())

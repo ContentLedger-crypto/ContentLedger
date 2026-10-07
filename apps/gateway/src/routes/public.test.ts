@@ -3,6 +3,7 @@ import { batches, MIGRATIONS_DIR, receipts, vouchers } from '@contentledger/db'
 import {
   merkleRoot,
   publicBatchSchema,
+  publicLatestBatchSchema,
   publicReceiptSchema,
   type ReceiptBody,
   receiptId,
@@ -122,7 +123,12 @@ async function issue(seq: number): Promise<EscrowReceiptBody> {
 const SETTLED_AT = new Date('2026-09-30T10:05:00.000Z')
 
 /** What the settler leaves behind: the batch row, and every voucher and receipt pointing at it. */
-async function settle(bodies: EscrowReceiptBody[], txByte: number, root?: string) {
+async function settle(
+  bodies: EscrowReceiptBody[],
+  txByte: number,
+  root?: string,
+  publishedAt = SETTLED_AT,
+) {
   const id = root ?? toHex(merkleRoot(bodies.map(receiptLeaf)))
   const seqs = bodies.map((body) => BigInt(body.seq))
   await db.insert(batches).values({
@@ -133,7 +139,7 @@ async function settle(bodies: EscrowReceiptBody[], txByte: number, root?: string
     root: id,
     chain: hex(txByte),
     txSig: utils.bytes.bs58.encode(new Uint8Array(64).fill(txByte)),
-    publishedAt: SETTLED_AT,
+    publishedAt,
   })
   const ids = bodies.map(receiptId)
   await db.update(vouchers).set({ batchId: id }).where(inArray(vouchers.receiptId, ids))
@@ -147,6 +153,70 @@ async function settle(bodies: EscrowReceiptBody[], txByte: number, root?: string
 const getBatch = (seqTo: number | string, consumer = CONSUMER) =>
   app.request(`/v1/batches/${consumer}/${seqTo}`)
 const getReceipt = (id: string) => app.request(`/v1/receipts/${id}`)
+
+describe('GET /v1/batches/latest', () => {
+  const getLatest = () => app.request('/v1/batches/latest')
+
+  it('answers 404 before anything has settled', async () => {
+    await issue(1)
+    const res = await getLatest()
+    expect(res.status).toBe(404)
+    expect(res.headers.get('Cache-Control')).toBeNull()
+  })
+
+  it('names the batch published last, by time rather than by seq or insertion', async () => {
+    const later = new Date(SETTLED_AT.getTime() + 60_000)
+    await settle([await issue(1)], 0xa1, undefined, later)
+    await settle([await issue(2), await issue(3)], 0xa2)
+
+    const res = await getLatest()
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Cache-Control')).toBe('public, max-age=30')
+    const raw = await res.json()
+    expect(publicLatestBatchSchema.parse(raw)).toEqual(raw)
+    expect(raw).toEqual({
+      consumer: CONSUMER,
+      seqTo: 1,
+      txSig: utils.bytes.bs58.encode(new Uint8Array(64).fill(0xa1)),
+      publishedAt: '2026-09-30T10:06:00.000Z',
+      receipts: 1,
+    })
+  })
+
+  it('counts the receipts in the batch from its seq range', async () => {
+    await settle([await issue(1), await issue(2), await issue(3)], 0xa3)
+    const raw = await (await getLatest()).json()
+    expect(raw).toMatchObject({ seqTo: 3, receipts: 3 })
+  })
+})
+
+describe('reading from another origin', () => {
+  const ORIGIN = { Origin: 'https://contentledger-crypto.github.io' }
+
+  it('lets any page read receipts and batches, with no credentials', async () => {
+    const body = await issue(1)
+    await settle([body], 0xa1)
+    for (const path of [
+      `/v1/receipts/${receiptId(body)}`,
+      `/v1/batches/${CONSUMER}/1`,
+      '/v1/batches/latest',
+    ]) {
+      const res = await app.request(path, { headers: ORIGIN })
+      expect(res.status, path).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin'), path).toBe('*')
+      expect(res.headers.get('Access-Control-Allow-Credentials'), path).toBeNull()
+    }
+  })
+
+  it('answers the preflight for GET only', async () => {
+    const res = await app.request('/v1/batches/latest', {
+      method: 'OPTIONS',
+      headers: { ...ORIGIN, 'Access-Control-Request-Method': 'GET' },
+    })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('Access-Control-Allow-Methods')).toBe('GET')
+  })
+})
 
 describe('GET /v1/batches/:consumer/:seqTo', () => {
   it('publishes the composition in seq order, enough to rebuild the anchored root', async () => {

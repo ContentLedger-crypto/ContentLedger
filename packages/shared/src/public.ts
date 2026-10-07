@@ -50,6 +50,16 @@ export const publicBatchSchema = z.object({
   receipts: z.array(receiptBodySchema),
 })
 
+// The newest settled batch: where it is, not what is in it. Its composition is the
+// batch endpoint's, its truth the transaction's.
+export const publicLatestBatchSchema = z.object({
+  consumer: base58KeySchema,
+  seqTo: seqSchema,
+  txSig: base58SignatureSchema,
+  publishedAt: utcInstantSchema,
+  receipts: z.number().int().positive(),
+})
+
 export type PublicAnchor = z.output<typeof publicAnchorSchema>
 export type PublicReceipt = z.output<typeof publicReceiptSchema>
 export type PublicBatch = z.output<typeof publicBatchSchema>
