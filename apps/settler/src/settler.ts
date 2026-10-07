@@ -29,18 +29,27 @@ export interface SettlerDeps {
   log: Log
 }
 
+export interface PassSummary {
+  agents: number
+  failed: number
+}
+
 /** One pass over every agent with unbatched vouchers; one agent's failure stops only that agent. */
-export async function settleAll(deps: SettlerDeps): Promise<void> {
-  for (const [consumer, pending] of await loadPending(deps.db)) {
+export async function settleAll(deps: SettlerDeps): Promise<PassSummary> {
+  const due = await loadPending(deps.db)
+  let failed = 0
+  for (const [consumer, pending] of due) {
     try {
       await settleAgent(deps, consumer, pending)
     } catch (error) {
+      failed += 1
       deps.log('error', 'settlement stopped for this agent', {
         consumer,
         error: error instanceof Error ? error.message : String(error),
       })
     }
   }
+  return { agents: due.size, failed }
 }
 
 async function settleAgent(deps: SettlerDeps, consumer: string, pending: PendingVoucher[]) {

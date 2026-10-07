@@ -1,5 +1,12 @@
 import { domainPda } from '@contentledger/chain'
-import { batches, receipts, SETTLEMENT_CHANNEL, vouchers, works } from '@contentledger/db'
+import {
+  batches,
+  receipts,
+  SETTLEMENT_CHANNEL,
+  settlerHeartbeat,
+  vouchers,
+  works,
+} from '@contentledger/db'
 import { and, asc, between, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
 import type { Batch, PendingVoucher } from './batch.js'
@@ -117,4 +124,17 @@ export async function recordBatch(
     }
     await tx.execute(sql`select pg_notify(${SETTLEMENT_CHANNEL}, ${id})`)
   })
+}
+
+export interface Pass {
+  passedAt: Date
+  intervalSeconds: number
+  failedAgents: number
+}
+
+export async function recordPass(db: Database, pass: Pass): Promise<void> {
+  await db
+    .insert(settlerHeartbeat)
+    .values({ id: 1, ...pass })
+    .onConflictDoUpdate({ target: settlerHeartbeat.id, set: pass })
 }

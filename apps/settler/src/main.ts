@@ -6,6 +6,7 @@ import postgres from 'postgres'
 import { z } from 'zod'
 import { rpcSettlementChain } from './chain.js'
 import { type Log, settleAll } from './settler.js'
+import { recordPass } from './store.js'
 
 const env = z
   .object({
@@ -57,6 +58,13 @@ let stopping = false
 // the interval, and two passes at once would race for the same vouchers.
 const tick = () => {
   inFlight = settleAll(deps)
+    .then(({ failed }) =>
+      recordPass(deps.db, {
+        passedAt: deps.now(),
+        intervalSeconds: env.SETTLE_INTERVAL_SECONDS,
+        failedAgents: failed,
+      }),
+    )
     .catch((error: unknown) =>
       log('error', 'settlement pass failed', {
         error: error instanceof Error ? error.message : String(error),

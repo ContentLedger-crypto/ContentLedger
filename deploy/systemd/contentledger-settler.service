@@ -1,0 +1,26 @@
+# The only process holding the operator key. Publishers are paid only while it passes:
+# an agent that asks to withdraw is settled within the grace window, or its vouchers lapse.
+[Unit]
+Description=ContentLedger settler — batches vouchers and settles them on-chain
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=contentledger
+Group=contentledger
+WorkingDirectory=/opt/contentledger/app/apps/settler
+EnvironmentFile=/etc/contentledger/common.env
+EnvironmentFile=/etc/contentledger/settler.env
+# Started as `pnpm start` runs it, minus pnpm: the wrapper alone costs ~90 MB per process.
+ExecStart=/usr/local/bin/node --import tsx src/main.ts
+Restart=always
+RestartSec=5
+MemoryMax=300M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/contentledger
+
+[Install]
+WantedBy=multi-user.target

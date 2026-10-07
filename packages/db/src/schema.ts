@@ -270,3 +270,25 @@ export const sessions = pgTable(
   },
   (table) => [index('sessions_wallet_idx').on(table.wallet), denyAll('sessions')],
 ).enableRLS()
+
+/**
+ * One row, rewritten after every settlement pass. A settler that stops passing loses
+ * publishers their vouchers once an agent's withdrawal grace runs out, so the gateway's
+ * /health reads this row rather than trusting that the process is up.
+ */
+export const settlerHeartbeat = pgTable(
+  'settler_heartbeat',
+  {
+    id: integer('id').primaryKey(),
+    passedAt: timestamp('passed_at', { withTimezone: true }).notNull(),
+    intervalSeconds: integer('interval_seconds').notNull(),
+    /** Agents the pass gave up on; their vouchers stay unsettled until a later pass. */
+    failedAgents: integer('failed_agents').notNull(),
+  },
+  (table) => [
+    check('settler_heartbeat_single_row', sql`${table.id} = 1`),
+    check('settler_heartbeat_interval_positive', sql`${table.intervalSeconds} > 0`),
+    check('settler_heartbeat_failed_non_negative', sql`${table.failedAgents} >= 0`),
+    denyAll('settler_heartbeat'),
+  ],
+).enableRLS()

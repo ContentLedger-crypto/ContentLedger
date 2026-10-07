@@ -25,7 +25,7 @@ const tables = (Object.values(schema) as unknown[])
   .sort()
 
 describe('RLS «нікому»', () => {
-  it('бачить усі девʼять таблиць схеми', () => {
+  it('бачить усі десять таблиць схеми', () => {
     expect(tables).toEqual([
       'attestations',
       'auth_challenges',
@@ -34,6 +34,7 @@ describe('RLS «нікому»', () => {
       'escrows',
       'receipts',
       'sessions',
+      'settler_heartbeat',
       'vouchers',
       'works',
     ])

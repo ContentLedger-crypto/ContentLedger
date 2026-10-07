@@ -5,6 +5,7 @@ import {
   MIGRATIONS_DIR,
   receipts,
   SETTLEMENT_CHANNEL,
+  settlerHeartbeat,
   vouchers,
   works,
 } from '@contentledger/db'
@@ -14,7 +15,7 @@ import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Batch, PendingVoucher } from './batch.js'
-import { lastBatch, loadPending, recordBatch } from './store.js'
+import { lastBatch, loadPending, recordBatch, recordPass } from './store.js'
 
 const AGENT = 'Agent111111111111111111111111111111111111111'
 const OTHER = 'Other111111111111111111111111111111111111111'
@@ -257,5 +258,34 @@ describe('lastBatch', () => {
     await recordBatch(db, AGENT, batchOf(mine.slice(1)), settlement())
     await recordBatch(db, OTHER, batchOf(all.get(OTHER) ?? []), { ...settlement(), txSig: 'o' })
     expect(await lastBatch(db, AGENT)).toEqual({ seqTo: 2n, chain: hex(0x42) })
+  })
+})
+
+describe('recordPass', () => {
+  beforeEach(async () => {
+    await db.execute(sql`truncate settler_heartbeat`)
+  })
+
+  it('keeps one row holding the latest pass', async () => {
+    await recordPass(db, {
+      passedAt: new Date('2026-10-07T12:00:00Z'),
+      intervalSeconds: 60,
+      failedAgents: 2,
+    })
+    await recordPass(db, {
+      passedAt: new Date('2026-10-07T12:01:00Z'),
+      intervalSeconds: 60,
+      failedAgents: 0,
+    })
+    expect(await db.select().from(settlerHeartbeat)).toEqual([
+      { id: 1, passedAt: new Date('2026-10-07T12:01:00Z'), intervalSeconds: 60, failedAgents: 0 },
+    ])
+  })
+
+  it('refuses a negative count of failed agents', async () => {
+    await expect(
+      recordPass(db, { passedAt: new Date(), intervalSeconds: 60, failedAgents: -1 }),
+    ).rejects.toThrow()
+    expect(await db.select().from(settlerHeartbeat)).toEqual([])
   })
 })

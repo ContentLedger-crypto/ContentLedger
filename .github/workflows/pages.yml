@@ -42,6 +42,9 @@ jobs:
         env:
           # Проектний сайт живе під /<repo>/, не в корені домену.
           PAGES_BASE: /${{ github.event.repository.name }}/
+          # The hosted gateway, from repository Variables. Unset, the build is the
+          # sign-in-free preview on sample figures, and the page says so itself.
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
 
       # Pages вмикає власник репозиторію один раз: Settings → Pages → Source:
       # "GitHub Actions". GITHUB_TOKEN сам сайт створити не може (перший прогін

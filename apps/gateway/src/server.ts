@@ -15,6 +15,7 @@ import { clientAddress, tokenBucket } from './rate-limit.js'
 import { rpcOwnedWorks, rpcRegistry } from './registry.js'
 import { authRoutes } from './routes/auth.js'
 import { contentRoutes } from './routes/content.js'
+import { healthRoutes } from './routes/health.js'
 import { publicRoutes } from './routes/public.js'
 import { publisherRoutes } from './routes/publisher.js'
 import { quoteRoutes } from './routes/quote.js'
@@ -75,6 +76,7 @@ const addressOf = clientAddress(
 )
 
 const app = createApp(
+  healthRoutes({ db, now }),
   quoteRoutes(registry),
   contentRoutes({
     registry,

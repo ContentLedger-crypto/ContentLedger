@@ -1,0 +1,25 @@
+# Behind Caddy on loopback; the only process the outside world reaches.
+[Unit]
+Description=ContentLedger gateway — quotes, paid content, receipts, the publisher API
+After=network-online.target contentledger-fixtures.service
+Wants=network-online.target contentledger-fixtures.service
+
+[Service]
+User=contentledger
+Group=contentledger
+WorkingDirectory=/opt/contentledger/app/apps/gateway
+EnvironmentFile=/etc/contentledger/common.env
+EnvironmentFile=/etc/contentledger/gateway.env
+# Started as `pnpm start` runs it, minus pnpm: the wrapper alone costs ~90 MB per process.
+ExecStart=/usr/local/bin/node --import tsx src/server.ts
+Restart=always
+RestartSec=5
+MemoryMax=400M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/contentledger
+
+[Install]
+WantedBy=multi-user.target

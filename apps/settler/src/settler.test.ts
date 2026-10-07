@@ -237,7 +237,7 @@ describe('settleAll', () => {
     await issue(agent, [{}, {}])
     const { chain, submitted } = fakeChain(new Map([[agent.toBase58(), escrowAt(agent)]]))
 
-    await run(chain).done
+    expect(await run(chain).done).toEqual({ agents: 1, failed: 0 })
 
     expect(submitted).toEqual([])
     expect(await db.select().from(batches)).toEqual([])
@@ -290,8 +290,8 @@ describe('settleAll', () => {
     failFor.add(failing.toBase58())
 
     const { done, logged } = run(chain)
-    await done
 
+    expect(await done).toEqual({ agents: 2, failed: 1 })
     expect(submitted).toHaveLength(1)
     expect((await db.select().from(batches)).map((b) => b.consumer)).toEqual([healthy.toBase58()])
     expect(logged).toContainEqual(

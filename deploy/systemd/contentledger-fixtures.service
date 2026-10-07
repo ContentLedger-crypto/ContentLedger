@@ -1,0 +1,24 @@
+# Not exposed: the firewall admits 22, 80 and 443 only, and the gateway reaches it on loopback.
+[Unit]
+Description=ContentLedger fixture corpus — the registered sources the gateway proxies
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=contentledger
+Group=contentledger
+WorkingDirectory=/opt/contentledger/app/apps/fixtures
+EnvironmentFile=/etc/contentledger/fixtures.env
+# Started as `pnpm start` runs it, minus pnpm: the wrapper alone costs ~90 MB per process.
+ExecStart=/usr/local/bin/node --import tsx src/server.ts
+Restart=always
+RestartSec=5
+MemoryMax=200M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/contentledger
+
+[Install]
+WantedBy=multi-user.target
