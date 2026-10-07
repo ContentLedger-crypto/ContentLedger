@@ -1,0 +1,180 @@
+{
+  "milestone": "M2",
+  "status": "complete",
+  "failure": null,
+  "cluster": "devnet",
+  "builtOn": "fa60998a436f12a2056eb9a3fd7bc44aa2161993",
+  "startedAt": "2026-10-07T10:46:27.951Z",
+  "finishedAt": "2026-10-07T10:54:36.200Z",
+  "agent": "J382NmFxZdygKYCeoRB6ByxcjLLgFRha24PQTYGaRoUc",
+  "publishers": [
+    {
+      "host": "acme-news.test",
+      "owner": "7ddMq1eic5MmuNAvoUzBnFo7epc383GAMyoY1atS7PQZ",
+      "payoutOwner": "7ddMq1eic5MmuNAvoUzBnFo7epc383GAMyoY1atS7PQZ"
+    },
+    {
+      "host": "kyiv-photo.test",
+      "owner": "8UsA1r8FreWa4Xp5wZxE6mbWDMotWYoNPVjMpoJDTHX8",
+      "payoutOwner": "FKoKPEnGHQsawTzHpWCvWj1WxAtwFCbZqZEWV4D3JoLM"
+    },
+    {
+      "host": "harbour-almanac.test",
+      "owner": "GMzqfK1rBAkHVPAaEUNE24cfamFYcZ5vNTTpWWR3fgg1",
+      "payoutOwner": "GMzqfK1rBAkHVPAaEUNE24cfamFYcZ5vNTTpWWR3fgg1"
+    }
+  ],
+  "requests": {
+    "planned": 300,
+    "delivered": 300,
+    "escrow": 270,
+    "x402": 30,
+    "failures": []
+  },
+  "clockOffsets": {
+    "acme-news.test": 0,
+    "kyiv-photo.test": 0,
+    "harbour-almanac.test": 0
+  },
+  "sc003": {
+    "budgetMs": 5000,
+    "byPublisher": {
+      "7ddMq1eic5MmuNAvoUzBnFo7epc383GAMyoY1atS7PQZ": {
+        "issued": 100,
+        "appeared": 100,
+        "missing": [],
+        "count": 100,
+        "p50": 821,
+        "p95": 883,
+        "max": 1064
+      },
+      "8UsA1r8FreWa4Xp5wZxE6mbWDMotWYoNPVjMpoJDTHX8": {
+        "issued": 100,
+        "appeared": 100,
+        "missing": [],
+        "count": 100,
+        "p50": 818,
+        "p95": 890,
+        "max": 957
+      },
+      "GMzqfK1rBAkHVPAaEUNE24cfamFYcZ5vNTTpWWR3fgg1": {
+        "issued": 100,
+        "appeared": 100,
+        "missing": [],
+        "count": 100,
+        "p50": 818,
+        "p95": 858,
+        "max": 978
+      }
+    },
+    "all": {
+      "count": 300,
+      "p50": 820,
+      "p95": 879,
+      "max": 1064
+    },
+    "verdict": "pass",
+    "why": null
+  },
+  "sc004": {
+    "publishers": 3,
+    "complete": 3,
+    "foreignRows": 0,
+    "byPublisher": {
+      "7ddMq1eic5MmuNAvoUzBnFo7epc383GAMyoY1atS7PQZ": {
+        "foreignInWindow": [],
+        "foreignListed": [],
+        "missingInWindow": [],
+        "missingListed": []
+      },
+      "8UsA1r8FreWa4Xp5wZxE6mbWDMotWYoNPVjMpoJDTHX8": {
+        "foreignInWindow": [],
+        "foreignListed": [],
+        "missingInWindow": [],
+        "missingListed": []
+      },
+      "GMzqfK1rBAkHVPAaEUNE24cfamFYcZ5vNTTpWWR3fgg1": {
+        "foreignInWindow": [],
+        "foreignListed": [],
+        "missingInWindow": [],
+        "missingListed": []
+      }
+    },
+    "verdict": "pass"
+  },
+  "takings": {
+    "byPublisher": {
+      "7ddMq1eic5MmuNAvoUzBnFo7epc383GAMyoY1atS7PQZ": {
+        "receipts": 100,
+        "charged": "242845",
+        "dashboard": {
+          "count": 100,
+          "total": "242845"
+        },
+        "onChain": "242845"
+      },
+      "8UsA1r8FreWa4Xp5wZxE6mbWDMotWYoNPVjMpoJDTHX8": {
+        "receipts": 100,
+        "charged": "779000",
+        "dashboard": {
+          "count": 100,
+          "total": "779000"
+        },
+        "onChain": "779000"
+      },
+      "GMzqfK1rBAkHVPAaEUNE24cfamFYcZ5vNTTpWWR3fgg1": {
+        "receipts": 100,
+        "charged": "313800",
+        "dashboard": {
+          "count": 100,
+          "total": "313800"
+        },
+        "onChain": "313800"
+      }
+    },
+    "verdict": "pass"
+  },
+  "transactions": {
+    "deposit": "3F4QCeafokZT2N899p8cFzUdhhRw1Di6he3hnnwgcGGUuhYg8kdw3qju416fkFg5R8M94k2QF6YFTQqwvZLQ2faw",
+    "batches": [
+      "4THVjuXKV369VaQ4ULXD288D4Mi1tTKMhsPVcd5Vw6anWuED75XXsZ2LoZaNcNoBjhaVpVHijEX2hQnSN2KYHQnb",
+      "5FaJYVU9mZJd3rnj9s32T7mLtgTWQobrtCaNsqTSsJa5jPw6rAWrx9rdwp9EG8KeTPyPcJttU3shEybpgWQ8t2sB",
+      "5Ydb61X9W5uZCEkPdzoep7V6NKEPR4TBCoQgRLho4GciksyF7dHZ6PVZ1xENjqougsmzhAYmWg9XDjbU6X8PYreq",
+      "3tDhrpt3HByH8RXRXMyz3wPHvUFmLBQKFNGJAjMDXFJcwr8vYuhVXo3rVW7N1ivpgrFXMJJdMy1X7XtrbrgDkL2B",
+      "2Za2gGc4xmZF9RdNjXDDCB9kPjN7GvEjVA2nTAcMFutLJgaYSFLbf577o8iFjAMUft6mRFfgKoRyDXengBbRtvg7",
+      "3YPgKsWjsuJQkeqPvoRNU2mtrLPARtzhLntxqruTphCQPm2tP9AH518avjsdeqDc2bX6yxb66ARtjwRiT3b7mdqP"
+    ],
+    "x402": [
+      "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"
+    ]
+  }
+}
