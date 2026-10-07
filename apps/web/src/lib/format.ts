@@ -37,6 +37,12 @@ export function clockLabel(instant: string, today: string): string {
   return `${Number(instant.slice(8, 10))} ${MONTHS[Number(instant.slice(5, 7)) - 1]} ${time.slice(0, 5)}`
 }
 
+/** The full UTC instant, for a receipt that may be any age. */
+export function instantLabel(instant: string): string {
+  const day = `${Number(instant.slice(8, 10))} ${MONTHS[Number(instant.slice(5, 7)) - 1]} ${instant.slice(0, 4)}`
+  return `${day}, ${instant.slice(11, 19)} UTC`
+}
+
 export function workPath(sourceId: string): string {
   try {
     const url = new URL(sourceId)

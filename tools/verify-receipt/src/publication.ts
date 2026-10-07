@@ -1,5 +1,9 @@
-import { type MerklePath, type ReceiptBody, receiptBodySchema } from '@contentledger/shared'
-import { z } from 'zod'
+import {
+  type MerklePath,
+  publicBatchSchema,
+  publicReceiptSchema,
+  type ReceiptBody,
+} from '@contentledger/shared'
 
 export type PublishedAnchor =
   | { kind: 'pending' }
@@ -25,38 +29,7 @@ export interface Publication {
   batch(consumer: string, seqTo: number): Promise<PublishedBatch | null>
 }
 
-const seqNumber = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
-const signature = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{86,88}$/)
-const hex256 = z.string().regex(/^[0-9a-f]{64}$/)
-
-const anchorSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('pending') }),
-  z.object({ kind: z.literal('payment'), paymentRef: signature }),
-  z.object({
-    kind: z.literal('batch'),
-    seqTo: seqNumber,
-    txSig: signature,
-    path: z.array(
-      z.object({
-        hash: hex256.transform((hex) => new Uint8Array(Buffer.from(hex, 'hex'))),
-        side: z.enum(['left', 'right']),
-      }),
-    ),
-  }),
-])
-
-// The body sits beside `id`, `hashMatch` and `anchor` in one object; it is cut out and
-// held to the strict signed form, so a field the payer never signed cannot ride along.
-const receiptAnswer = z.looseObject({ id: hex256, hashMatch: z.boolean(), anchor: anchorSchema })
-
-// `root` and `chain` are served too, and deliberately not read: those come from the network.
-const batchAnswer = z.object({
-  consumer: z.string(),
-  seqFrom: seqNumber,
-  seqTo: seqNumber,
-  previous: z.object({ seqTo: seqNumber, txSig: signature }).nullable(),
-  receipts: z.array(receiptBodySchema),
-})
+const hexBytes = (hex: string): Uint8Array => new Uint8Array(Buffer.from(hex, 'hex'))
 
 export function gatewayPublication(baseUrl: string, fetchImpl: typeof fetch = fetch): Publication {
   async function get(path: string): Promise<unknown> {
@@ -70,13 +43,25 @@ export function gatewayPublication(baseUrl: string, fetchImpl: typeof fetch = fe
     async receipt(id) {
       const raw = await get(`/v1/receipts/${id}`)
       if (raw === null) return null
-      const { id: _id, hashMatch: _hashMatch, anchor, ...body } = receiptAnswer.parse(raw)
-      return { body: receiptBodySchema.parse(body), anchor }
+      const { body, anchor } = publicReceiptSchema.parse(raw)
+      if (anchor.kind !== 'batch') return { body, anchor }
+      const { seqTo, txSig, path } = anchor
+      const steps = path.map(({ hash, side }) => ({ hash: hexBytes(hash), side }))
+      return { body, anchor: { kind: 'batch', seqTo, txSig, path: steps } }
     },
 
+    // `root` and `chain` are served too, and deliberately not read: those come from the network.
     async batch(consumer, seqTo) {
       const raw = await get(`/v1/batches/${consumer}/${seqTo}`)
-      return raw === null ? null : batchAnswer.parse(raw)
+      if (raw === null) return null
+      const batch = publicBatchSchema.parse(raw)
+      return {
+        consumer: batch.consumer,
+        seqFrom: batch.seqFrom,
+        seqTo: batch.seqTo,
+        previous: batch.previous,
+        receipts: batch.receipts,
+      }
     },
   }
 }

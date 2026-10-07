@@ -1,6 +1,7 @@
 export * from './auth.js'
 export * from './merkle.js'
 export * from './money.js'
+export * from './public.js'
 export * from './publisher.js'
 export * from './rates.js'
 export * from './split.js'

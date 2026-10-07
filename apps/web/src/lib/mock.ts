@@ -1,14 +1,15 @@
 import type {
   publisherReceiptSchema,
   publisherSummarySchema,
+  receiptBodySchema,
   receiptsPageSchema,
 } from '@contentledger/shared'
 import type { z } from 'zod'
 
 /**
- * Stand-in for the gateway until the dashboard reads it live. Only `api.ts` imports it.
- * The first half is wire JSON, exactly as `/v1/publisher/*` serves it; the second half
- * is the receipt screen, which no endpoint serves yet.
+ * Stand-in for the gateway in the preview. Only `api.ts` imports it.
+ * Wire JSON, exactly as `/v1/publisher/*` serves it, and the signed bodies of one batch:
+ * `api.ts` hashes those into the receipt, root and path `/v1/receipts/:id` would serve.
  */
 
 type WireReceipt = z.input<typeof publisherReceiptSchema>
@@ -292,56 +293,39 @@ export const SUMMARY: z.input<typeof publisherSummarySchema> = {
   registeredWorks: 5,
 }
 
-/* --------------------------- not served yet: receipt screen on /v1/receipts/:id */
+/* ------------------------- /v1/batches: the batch the sample receipt was settled in */
 
-export const RECEIPT = {
-  id: 'f3c564b7d2455de487166eecde3a1571a53a6fba57658386350ae82dad53fd29',
-  issuedAt: '3 September 2026, 14:50:41 UTC',
-  consumer: AGENT.meridian,
-  workId: WORK.tideGauges,
-  source: SOURCE.tideGauges,
-  use: 'inference',
-  rateSourceLabel: 'set on this work',
-  yourRate: 905n,
-  protocolFee: 91n,
-  agentPaid: 996n,
-  youReceive: 905n,
-  registeredHash: 'dcd29263d24f8959f871dad6a2afe032ace4a0877c1ff114957caf87a616f805',
-  servedHash: 'dcd29263d24f8959f871dad6a2afe032ace4a0877c1ff114957caf87a616f805',
-  match: 'yes',
-  method: 'escrow',
-  escrowAccount: 'BUHqsiLM6HyUEKrdVAtWQ1KG9K9oKJJAJXjUv3fFmHLp',
-  voucherSequence: '1742',
-  runningBefore: 1236504n,
-  runningAfter: 1237500n,
-  batchFrom: '1701',
-  batchTo: '1742',
-  batchCount: 42,
-  merkleRoot: '2b8febf3f2cc3b7bcde03d97f17f1c30f3e97d4674b3623c2eb4111ff48416da',
-  voucherChain: 'baf3324d17be332cd5eefa21d8235b00c0151d46a86cf1995b04444dbf7f7d1c',
-  transaction:
-    'U7kAUVNnP6cCjvyAV9P9i6PqJcmnrHZeP8hmrFhvnXS27F3awFVYB2Acx8FfKUTDAaK9JCEycor6BzmZmxEdrwL7',
-  settledAt: '3 September 2026, 14:51:00 UTC',
+type WireBody = z.input<typeof receiptBodySchema>
+
+const MERIDIAN_RATES = {
+  0: ['tideGauges', 'inference', 905],
+  1: ['saltLine', 'inference', 500],
+  2: ['dryPort', 'train', 1500],
 } as const
 
-export interface VerifyStep {
-  readonly n: number
-  readonly text: string
-  readonly value: string | null
+const batchBody = (seq: number): WireBody => {
+  const [work, useType, tariff] = MERIDIAN_RATES[(seq % 3) as 0 | 1 | 2]
+  const second = 41 - (42 - seq) * 7
+  return {
+    consumer: AGENT.meridian,
+    work: WORK[work],
+    useType,
+    tariff: String(tariff),
+    fee: String(Math.ceil(tariff / 10)),
+    rateLevel: work === 'tideGauges' ? 'work' : 'domain',
+    servedHash: 'dcd29263d24f8959f871dad6a2afe032ace4a0877c1ff114957caf87a616f805',
+    registryHash: 'dcd29263d24f8959f871dad6a2afe032ace4a0877c1ff114957caf87a616f805',
+    acceptedAt: new Date(Date.UTC(2026, 8, 3, 14, 50, second)).toISOString(),
+    paymentMethod: 'escrow',
+    seq,
+  }
 }
 
-export const VERIFY_STEPS: readonly VerifyStep[] = [
-  { n: 1, text: 'Read the batch root from the chain', value: '2b8febf3…f48416da' },
-  { n: 2, text: 'Prove this receipt is in that batch — inclusion path, 6 steps', value: null },
-  { n: 3, text: 'Recompute the voucher chain across the whole batch', value: 'baf3324d…bf7f7d1c' },
-  { n: 4, text: 'Check the sum charged matches the batch', value: '0.041832 USDC' },
-]
-
-export const INCLUSION_PATH: readonly string[] = [
-  '84cf0501f86a94c50718204d966badc623ff87330f3a5cf2159be9c323a9aad7',
-  '416e9cbef1f49405c80486dcf90c065e9d11ec7aad6d94bf5013432b05412106',
-  '3cd51ef618af9f1c982a36461afa3d71e8e48c016860d3c4a2dcddadd9be057c',
-  '323417c207ed47584afe3477184d695e2938865339ba03d10089bd1fe8eaae2c',
-  'bd4fc50240c281804fab6e470b98483e4b1c6d73e228c13474a81485128e127b',
-  'a6957693417d99daaccb7dc37103dd2f677c8180ec0c76a67ece2f26a0450dab',
-]
+/** Escrow vouchers 1–42 of one agent; the last is the receipt the preview opens. */
+export const SAMPLE_BATCH = {
+  escrow: 'BUHqsiLM6HyUEKrdVAtWQ1KG9K9oKJJAJXjUv3fFmHLp',
+  sourceId: SOURCE.tideGauges,
+  txSig: 'U7kAUVNnP6cCjvyAV9P9i6PqJcmnrHZeP8hmrFhvnXS27F3awFVYB2Acx8FfKUTDAaK9JCEycor6BzmZmxEdrwL7',
+  publishedAt: '2026-09-03T14:51:00.000Z',
+  receipts: Array.from({ length: 42 }, (_, i) => batchBody(i + 1)),
+} as const

@@ -27,8 +27,7 @@ interface FeedProps {
   /** The gateway refused the session: it ended, or was never valid. */
   readonly onUnauthorized?: () => void
   readonly onArrival?: (receipt: PublisherReceipt) => void
-  /** Absent while the receipt screen cannot show the row it would open. */
-  readonly onOpenReceipt?: () => void
+  readonly onOpenReceipt?: (receipt: PublisherReceipt) => void
 }
 
 export function Feed({ source, narrow, onUnauthorized, onArrival, onOpenReceipt }: FeedProps) {
@@ -49,7 +48,13 @@ export function Feed({ source, narrow, onUnauthorized, onArrival, onOpenReceipt 
       </div>
       <div className="mt-6" style={{ borderTop: `1px solid ${COLOR.hairline}` }}>
         {state.rows.map((row) => (
-          <Row key={row.id} row={row} today={today} narrow={narrow} onOpen={onOpenReceipt} />
+          <Row
+            key={row.id}
+            row={row}
+            today={today}
+            narrow={narrow}
+            onOpen={onOpenReceipt && (() => onOpenReceipt(row))}
+          />
         ))}
       </div>
       {!state.loaded && (

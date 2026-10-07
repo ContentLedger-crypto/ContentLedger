@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clockLabel, formatUsdc, shareOf, truncateMiddle, workPath } from './format'
+import { clockLabel, formatUsdc, instantLabel, shareOf, truncateMiddle, workPath } from './format'
 
 describe('formatUsdc', () => {
   it('names the currency after the shared six-decimal form', () => {
@@ -35,6 +35,13 @@ describe('clockLabel', () => {
   it('names the day of an earlier instant, to the minute', () => {
     expect(clockLabel('2026-09-03T14:52:11.000Z', '2026-09-04')).toBe('3 Sep 14:52')
     expect(clockLabel('2025-12-31T23:59:59.000Z', '2026-01-01')).toBe('31 Dec 23:59')
+  })
+})
+
+describe('instantLabel', () => {
+  it('spells out the UTC day and time to the second', () => {
+    expect(instantLabel('2026-09-03T14:50:41.000Z')).toBe('3 Sep 2026, 14:50:41 UTC')
+    expect(instantLabel('2025-12-31T23:59:59.999Z')).toBe('31 Dec 2025, 23:59:59 UTC')
   })
 })
 

@@ -12,7 +12,7 @@ import { Feed } from '@/screens/Feed'
 interface LedgerProps {
   readonly source: PublisherSource
   readonly onUnauthorized?: () => void
-  readonly onOpenReceipt?: () => void
+  readonly onOpenReceipt?: (receipt: PublisherReceipt) => void
 }
 
 export function Ledger({ source, onUnauthorized, onOpenReceipt }: LedgerProps) {

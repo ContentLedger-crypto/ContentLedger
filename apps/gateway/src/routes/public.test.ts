@@ -1,8 +1,9 @@
 import { type Domain, escrowPda, type Work } from '@contentledger/chain'
 import { batches, MIGRATIONS_DIR, receipts, vouchers } from '@contentledger/db'
 import {
-  type MerkleSide,
   merkleRoot,
+  publicBatchSchema,
+  publicReceiptSchema,
   type ReceiptBody,
   receiptId,
   receiptLeaf,
@@ -143,35 +144,6 @@ async function settle(bodies: EscrowReceiptBody[], txByte: number, root?: string
   return id
 }
 
-interface BatchJson {
-  consumer: string
-  seqFrom: number
-  seqTo: number
-  root: string
-  chain: string
-  txSig: string
-  publishedAt: string
-  previous: { seqTo: number; txSig: string } | null
-  receipts: ReceiptBody[]
-}
-
-interface ReceiptJson {
-  id: string
-  hashMatch: boolean
-  anchor:
-    | { kind: 'pending' }
-    | { kind: 'payment'; paymentRef: string }
-    | {
-        kind: 'batch'
-        consumer: string
-        seqTo: number
-        root: string
-        txSig: string
-        settledAt: string
-        path: Array<{ hash: string; side: MerkleSide }>
-      }
-}
-
 const getBatch = (seqTo: number | string, consumer = CONSUMER) =>
   app.request(`/v1/batches/${consumer}/${seqTo}`)
 const getReceipt = (id: string) => app.request(`/v1/receipts/${id}`)
@@ -184,8 +156,9 @@ describe('GET /v1/batches/:consumer/:seqTo', () => {
     const res = await getBatch(3)
     expect(res.status).toBe(200)
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable')
-    const batch = (await res.json()) as BatchJson
-    expect(batch).toEqual({
+    const raw = await res.json()
+    const batch = publicBatchSchema.parse(raw)
+    expect(raw).toEqual({
       consumer: CONSUMER,
       seqFrom: 1,
       seqTo: 3,
@@ -204,14 +177,15 @@ describe('GET /v1/batches/:consumer/:seqTo', () => {
     const second = [await issue(2), await issue(3)]
     await settle(second, 0xa2)
 
-    const batch = (await (await getBatch(3)).json()) as BatchJson
+    const raw = await (await getBatch(3)).json()
+    const batch = publicBatchSchema.parse(raw)
     expect(batch.seqFrom).toBe(2)
     expect(batch.previous).toEqual({
       seqTo: 1,
       txSig: utils.bytes.bs58.encode(new Uint8Array(64).fill(0xa1)),
     })
     expect(batch.receipts).toEqual(second)
-    expect(batch).not.toHaveProperty('previousChain')
+    expect(raw).not.toHaveProperty('previousChain')
   })
 
   it('answers 404 for a batch that was never published', async () => {
@@ -269,8 +243,8 @@ describe('GET /v1/receipts/:id', () => {
     const res = await getReceipt(receiptId(body))
     expect(res.status).toBe(200)
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable')
-    const receipt = (await res.json()) as ReceiptJson & EscrowReceiptBody
-    expect(receipt).toMatchObject({ id: receiptId(body), ...body, hashMatch: false })
+    const receipt = publicReceiptSchema.parse(await res.json())
+    expect(receipt).toMatchObject({ id: receiptId(body), body, hashMatch: false })
     if (receipt.anchor.kind !== 'batch') throw new Error(`anchor is ${receipt.anchor.kind}`)
     expect(receipt.anchor).toMatchObject({
       kind: 'batch',
@@ -314,8 +288,8 @@ describe('GET /v1/receipts/:id', () => {
 
     const res = await getReceipt(receiptId(body))
     expect(res.status).toBe(200)
-    expect((await res.json()) as ReceiptJson).toMatchObject({
-      ...body,
+    expect(publicReceiptSchema.parse(await res.json())).toMatchObject({
+      body,
       anchor: { kind: 'payment', paymentRef },
     })
   })

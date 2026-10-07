@@ -10,7 +10,7 @@ export const base58KeySchema = z
 export const hex256Schema = z
   .string()
   .regex(/^[0-9a-f]{64}$/, 'expected a lowercase sha256 hex digest')
-const base58Signature = z
+export const base58SignatureSchema = z
   .string()
   .regex(/^[1-9A-HJ-NP-Za-km-z]{86,88}$/, 'expected a base58 transaction signature')
 
@@ -20,7 +20,7 @@ export const utcInstantSchema = z
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/, 'expected ISO-8601 UTC with milliseconds')
 
 /** `seq` лишається числом тільки тому, що обмежений; гроші не обмежені ніколи. */
-const seqSchema = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
+export const seqSchema = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
 
 const issuedFields = {
   consumer: base58KeySchema,
@@ -39,7 +39,7 @@ export const receiptBodySchema = z.discriminatedUnion('paymentMethod', [
   z.strictObject({
     ...issuedFields,
     paymentMethod: z.literal('x402'),
-    paymentRef: base58Signature,
+    paymentRef: base58SignatureSchema,
   }),
 ])
 

@@ -1,24 +1,42 @@
 import {
   authChallengeSchema,
+  chainGenesis,
+  chainStep,
+  merkleProof,
+  merkleRoot,
+  type PublicBatch,
+  type PublicReceipt,
   type PublisherReceipt,
   type PublisherSummary,
+  publicBatchSchema,
+  publicReceiptSchema,
   publisherReceiptSchema,
   publisherSummarySchema,
   type ReceiptsPage,
+  receiptBodySchema,
+  receiptId,
+  receiptLeaf,
   receiptsPageSchema,
   type SettlementEvent,
   sessionGrantSchema,
   settlementEventSchema,
 } from '@contentledger/shared'
+import bs58 from 'bs58'
 import { z } from 'zod'
 import type { AuthApi } from '@/auth/session'
-import { INCOMING, INCOMING_INTERVAL_MS, RECEIPTS, SESSION_WALLET, SUMMARY } from './mock'
+import {
+  INCOMING,
+  INCOMING_INTERVAL_MS,
+  RECEIPTS,
+  SAMPLE_BATCH,
+  SESSION_WALLET,
+  SUMMARY,
+} from './mock'
 import { sseMessages } from './sse'
 
 /**
  * The one module the dashboard reads data from. What the gateway serves passes through
- * the shared contract here exactly as a live response will; what it does not serve yet
- * is re-exported below as it is, until the task that serves it.
+ * the shared contract here exactly as a live response will, and so does the preview's.
  */
 
 export type DataMode =
@@ -173,6 +191,30 @@ export function publisherApiFor(
   }
 }
 
+/** The public endpoints (FR-013b): no session, the same answer for whoever asks. */
+export interface PublicationSource {
+  receipt(id: string, signal: AbortSignal): Promise<PublicReceipt | null>
+  batch(consumer: string, seqTo: number, signal: AbortSignal): Promise<PublicBatch | null>
+}
+
+export function publicationApiFor(
+  apiUrl: string,
+  fetcher: typeof fetch = defaultFetch,
+): PublicationSource {
+  async function get<S extends z.ZodType>(schema: S, path: string, signal: AbortSignal) {
+    const response = await fetcher(`${apiUrl}${path}`, { signal })
+    if (response.status === 404) return null
+    if (!response.ok) throw await refusalOf(response)
+    return schema.parse(await response.json()) as z.output<S>
+  }
+
+  return {
+    receipt: (id, signal) => get(publicReceiptSchema, `/v1/receipts/${id}`, signal),
+    batch: (consumer, seqTo, signal) =>
+      get(publicBatchSchema, `/v1/batches/${consumer}/${seqTo}`, signal),
+  }
+}
+
 // An event this dashboard does not know yet is skipped, so the gateway can add one first.
 function feedEventOf(name: string, data: string): FeedEvent | null {
   switch (name) {
@@ -216,4 +258,54 @@ export const sampleSource: PublisherSource = {
     }),
 }
 
-export { INCLUSION_PATH, RECEIPT, VERIFY_STEPS } from './mock'
+const toHex = (bytes: Uint8Array): string =>
+  Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+
+const sampleBodies = SAMPLE_BATCH.receipts.map((body) => receiptBodySchema.parse(body))
+const sampleLeaves = sampleBodies.map(receiptLeaf)
+const sampleIndex = sampleBodies.length - 1
+const sampleBody = sampleBodies[sampleIndex]
+if (sampleBody === undefined) throw new Error('the sample batch is empty')
+
+const sampleBatch = publicBatchSchema.parse({
+  consumer: sampleBody.consumer,
+  seqFrom: 1,
+  seqTo: sampleBodies.length,
+  root: toHex(merkleRoot(sampleLeaves)),
+  chain: toHex(sampleLeaves.reduce(chainStep, chainGenesis(bs58.decode(SAMPLE_BATCH.escrow)))),
+  txSig: SAMPLE_BATCH.txSig,
+  publishedAt: SAMPLE_BATCH.publishedAt,
+  previous: null,
+  receipts: SAMPLE_BATCH.receipts,
+})
+
+const sampleReceipt = publicReceiptSchema.parse({
+  id: receiptId(sampleBody),
+  ...sampleBody,
+  hashMatch: sampleBody.servedHash === sampleBody.registryHash,
+  anchor: {
+    kind: 'batch',
+    consumer: sampleBatch.consumer,
+    seqTo: sampleBatch.seqTo,
+    root: sampleBatch.root,
+    txSig: sampleBatch.txSig,
+    settledAt: sampleBatch.publishedAt,
+    path: merkleProof(sampleLeaves, sampleIndex).map(({ hash, side }) => ({
+      hash: toHex(hash),
+      side,
+    })),
+  },
+})
+
+/** One settled batch, hashed here as the gateway would hash it, with one receipt to open. */
+export const samplePublication: PublicationSource = {
+  receipt: async (id) => (id === sampleReceipt.id ? sampleReceipt : null),
+  batch: async (consumer, seqTo) =>
+    consumer === sampleBatch.consumer && seqTo === sampleBatch.seqTo ? sampleBatch : null,
+}
+
+/** The sample rows are not signed bodies, so each of them opens the one sample receipt. */
+export const sampleOpening = { id: sampleReceipt.id, sourceId: SAMPLE_BATCH.sourceId }
+
+export const publication: PublicationSource =
+  dataMode.kind === 'gateway' ? publicationApiFor(dataMode.apiUrl) : samplePublication

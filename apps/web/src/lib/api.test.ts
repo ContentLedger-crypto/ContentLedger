@@ -1,10 +1,14 @@
+import { merkleRoot, receiptLeaf, verifyInclusion } from '@contentledger/shared'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
   authApiFor,
   dataModeOf,
   type FeedEvent,
+  publicationApiFor,
   publisherApiFor,
+  sampleOpening,
+  samplePublication,
   sampleSource,
   sampleSummary,
 } from './api'
@@ -211,6 +215,75 @@ describe('publisherApiFor', () => {
       sse('event: receipt\ndata: {"id":"short"}\n\n'),
     )
     await expect(api.stream(() => {}, signal)).rejects.toThrow()
+  })
+})
+
+describe('publicationApiFor', () => {
+  const signal = new AbortController().signal
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
+
+  it('reads a receipt and its batch without a session, through the shared contract', async () => {
+    const receipt = await samplePublication.receipt(sampleOpening.id, signal)
+    if (receipt === null || receipt.anchor.kind !== 'batch') throw new Error('no sample')
+    const { consumer, seqTo } = receipt.anchor
+    const batch = await samplePublication.batch(consumer, seqTo, signal)
+    const fetcher = vi.fn<typeof fetch>(async (url) =>
+      String(url).includes('/v1/receipts/')
+        ? json({ id: receipt.id, ...receipt.body, hashMatch: true, anchor: receipt.anchor })
+        : json(batch),
+    )
+    const api = publicationApiFor('https://gw.example', fetcher)
+
+    expect(await api.receipt(receipt.id, signal)).toEqual(receipt)
+    expect(await api.batch(consumer, seqTo, signal)).toEqual(batch)
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      `https://gw.example/v1/receipts/${receipt.id}`,
+      `https://gw.example/v1/batches/${consumer}/${seqTo}`,
+    ])
+    const [, init] = fetcher.mock.calls[0] ?? []
+    expect(new Headers(init?.headers).has('Authorization')).toBe(false)
+    expect(init?.signal).toBe(signal)
+  })
+
+  it('answers null for what the gateway does not know, and carries any other refusal', async () => {
+    const notFound = publicationApiFor('', async () =>
+      json({ error: { code: 'NOT_FOUND', message: 'no such receipt' } }, 404),
+    )
+    expect(await notFound.receipt('ab'.repeat(32), signal)).toBe(null)
+    expect(await notFound.batch(sampleOpening.id, 3, signal)).toBe(null)
+
+    const limited = publicationApiFor('', async () =>
+      json({ error: { code: 'RATE_LIMITED', message: 'slow', details: { retryAfter: 2 } } }, 429),
+    )
+    await expect(limited.receipt('ab'.repeat(32), signal)).rejects.toMatchObject({
+      status: 429,
+      retryAfter: 2,
+    })
+  })
+
+  it('rejects a receipt that breaks the contract instead of trusting it', async () => {
+    const api = publicationApiFor('', async () => json({ id: 'ab'.repeat(32), anchor: {} }))
+    await expect(api.receipt('ab'.repeat(32), signal)).rejects.toThrow()
+  })
+})
+
+describe('samplePublication', () => {
+  it('proves its receipt into the root of the composition it publishes', async () => {
+    const receipt = await samplePublication.receipt(sampleOpening.id, new AbortController().signal)
+    if (receipt === null || receipt.anchor.kind !== 'batch') throw new Error('no sample')
+    const batch = await samplePublication.batch(
+      receipt.anchor.consumer,
+      receipt.anchor.seqTo,
+      new AbortController().signal,
+    )
+    if (batch === null) throw new Error('no sample batch')
+    const fromHex = (hex: string) => Uint8Array.from(hex.match(/../g) ?? [], (b) => parseInt(b, 16))
+
+    const root = merkleRoot(batch.receipts.map(receiptLeaf))
+    expect(Array.from(root)).toEqual(Array.from(fromHex(batch.root)))
+    const path = receipt.anchor.path.map(({ hash, side }) => ({ hash: fromHex(hash), side }))
+    expect(verifyInclusion(receiptLeaf(receipt.body), path, root)).toBe(true)
+    expect(batch.receipts).toContainEqual(receipt.body)
   })
 })
 

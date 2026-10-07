@@ -6,13 +6,15 @@ import {
   authApi,
   dataMode,
   type PublisherSource,
+  publication,
   publisherApiFor,
+  sampleOpening,
   sampleSource,
   sampleWallet,
 } from '@/lib/api'
 import { COLOR } from '@/lib/theme'
 import { Ledger } from '@/screens/Ledger'
-import { ReceiptScreen } from '@/screens/Receipt'
+import { type ReceiptOpening, ReceiptScreen } from '@/screens/Receipt'
 import { Summary } from '@/screens/Summary'
 
 const PREVIEW_NOTICE = 'Preview with sample figures: no gateway is connected to this page.'
@@ -51,11 +53,12 @@ function Dashboard({
 }: {
   wallet: string
   source: PublisherSource
-  /** Sample figures throughout; otherwise everything but the receipt screen is this wallet's. */
+  /** Sample figures throughout; otherwise everything is this wallet's. */
   preview: boolean
   onSignOut?: () => void
 }) {
   const [view, setView] = useState<ViewName>('ledger')
+  const [opening, setOpening] = useState<ReceiptOpening | null>(null)
   const notice = preview ? PREVIEW_NOTICE : null
 
   return (
@@ -74,12 +77,22 @@ function Dashboard({
         <Ledger
           source={source}
           onUnauthorized={onSignOut}
-          // The receipt screen shows a sample until it reads the row it was opened from.
-          onOpenReceipt={preview ? () => setView('receipt') : undefined}
+          onOpenReceipt={(receipt) => {
+            setOpening(preview ? sampleOpening : receipt)
+            setView('receipt')
+          }}
         />
       )}
       {view === 'summary' && <Summary source={source} onUnauthorized={onSignOut} />}
-      {view === 'receipt' && <ReceiptScreen onBack={() => setView('ledger')} />}
+      {view === 'receipt' && opening !== null && (
+        <ReceiptScreen
+          opening={opening}
+          publication={publication}
+          source={source}
+          onUnauthorized={onSignOut}
+          onBack={() => setView('ledger')}
+        />
+      )}
     </>
   )
 }
