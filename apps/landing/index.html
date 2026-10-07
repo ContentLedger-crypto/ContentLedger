@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ContentLedger — one request, one work, one receipt</title>
+<meta name="description" content="A royalty rail for AI data on Solana: an agent pays a publisher per request and gets the content with a receipt anyone can check on-chain.">
+<meta name="theme-color" content="#0e1a33" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f0f0d8" media="(prefers-color-scheme: light)">
+<link rel="canonical" href="https://contentledger-crypto.github.io/ContentLedger/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="ContentLedger — one request, one work, one receipt">
+<meta property="og:description" content="An AI agent pays a publisher for a single work in the same exchange and leaves with the content and a receipt that can be checked against a root on Solana.">
+<meta property="og:url" content="https://contentledger-crypto.github.io/ContentLedger/">
+<meta property="og:image" content="https://contentledger-crypto.github.io/ContentLedger/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The ContentLedger mark, an engraved disc of wave lines in cream on navy, with the line: One request. One work. One receipt.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="contentledger-api" content="%VITE_API_URL%">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+  <defs>
+    <clipPath id="disc"><circle cx="50" cy="50" r="46"></circle></clipPath>
+    <path id="waves" clip-path="url(#disc)" fill="none" stroke="currentColor" d="M2 4.0C27 2.0 33 2.0 50 4.0S73 6.0 98 4.0M2 8.0C27 5.2 33 5.2 50 8.0S73 10.8 98 8.0M2 12.0C27 8.3 33 8.3 50 12.0S73 15.7 98 12.0M2 16.0C27 11.3 33 11.3 50 16.0S73 20.7 98 16.0M2 20.0C27 14.2 33 14.2 50 20.0S73 25.8 98 20.0M2 24.0C27 17.1 33 17.1 50 24.0S73 30.9 98 24.0M2 28.0C27 19.9 33 19.9 50 28.0S73 36.1 98 28.0M2 32.0C27 22.7 33 22.7 50 32.0S73 41.3 98 32.0M2 36.0C27 25.4 33 25.4 50 36.0S73 46.6 98 36.0M2 40.0C27 28.0 33 28.0 50 40.0S73 52.0 98 40.0M2 44.0C27 30.6 33 30.6 50 44.0S73 57.4 98 44.0M2 48.0C27 33.2 33 33.2 50 48.0S73 62.8 98 48.0M2 52.0C27 37.2 33 37.2 50 52.0S73 66.8 98 52.0M2 56.0C27 42.6 33 42.6 50 56.0S73 69.4 98 56.0M2 60.0C27 48.0 33 48.0 50 60.0S73 72.0 98 60.0M2 64.0C27 53.4 33 53.4 50 64.0S73 74.6 98 64.0M2 68.0C27 58.7 33 58.7 50 68.0S73 77.3 98 68.0M2 72.0C27 63.9 33 63.9 50 72.0S73 80.1 98 72.0M2 76.0C27 69.1 33 69.1 50 76.0S73 82.9 98 76.0M2 80.0C27 74.2 33 74.2 50 80.0S73 85.8 98 80.0M2 84.0C27 79.3 33 79.3 50 84.0S73 88.7 98 84.0M2 88.0C27 84.3 33 84.3 50 88.0S73 91.7 98 88.0M2 92.0C27 89.2 33 89.2 50 92.0S73 94.8 98 92.0M2 96.0C27 94.0 33 94.0 50 96.0S73 98.0 98 96.0"></path>
+  </defs>
+</svg>
+
+<div class="page">
+<header class="masthead">
+  <a class="brand" href="#main" aria-label="ContentLedger, top of page">
+    <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#waves" stroke-width="1.6"></use></svg>
+    <span>ContentLedger</span>
+  </a>
+  <p class="status">Devnet · test currency · fixture publishers</p>
+  <a class="button" href="app/">Open the dashboard</a>
+</header>
+
+<main id="main" class="book">
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-text">
+    <p class="eyebrow">A royalty rail for AI data</p>
+    <h1 id="hero-title">One request.<br>One work.<br>One receipt.</h1>
+    <p class="lead">An AI agent asks for a single work, pays its publisher in the same exchange, and leaves with the content and a receipt. The publisher watches the payment arrive. The receipt can be checked against a root on Solana.</p>
+    <div class="actions">
+      <a class="button primary" href="app/">Open the dashboard</a>
+      <a class="button quiet" href="https://github.com/ContentLedger-crypto/ContentLedger">Read the code</a>
+    </div>
+  </div>
+
+  <figure class="receipt-figure">
+    <svg class="guilloche" viewBox="0 0 100 100" aria-hidden="true"><use href="#waves" stroke-width="0.35"></use></svg>
+    <div class="receipt">
+      <div class="receipt-head"><span>Receipt</span><span class="label">seq 2 · escrow</span></div>
+      <p class="receipt-id">36ba4b231e881d7e538d9230379f0ad0<br>9b37ff3cbfa6054272cee0c8e0d0f7c6</p>
+      <dl>
+        <dt>Work</dt><dd>acme-news.test<br><span class="muted">/2026/ai-act-explained.html</span></dd>
+        <dt>Use</dt><dd>train</dd>
+        <dt>Tariff</dt><dd>0.002000 <span class="muted">test USDC · domain rate</span></dd>
+        <dt>Protocol fee</dt><dd>0.000200 <span class="muted">test USDC</span></dd>
+        <dt>Paid by</dt><dd><span class="mono">3gTX…wXj2</span></dd>
+        <dt>Accepted</dt><dd>2026-10-07 11:46:09 UTC</dd>
+        <dt>Content hash</dt><dd><span class="mono">2ac77511…e966f4</span> <span class="sage">= registered</span></dd>
+        <dt>Batch</dt><dd>receipts 1–12 · settled 11:46:35</dd>
+        <dt>Transaction</dt><dd><a class="mono" href="https://explorer.solana.com/tx/5ngSct21ZxWje6S7KyABywizokDRwHwfaWaNoFHWnubAD3DDjBcjzKGc9WDq1JMeTTwWaNyiHj54bCiSAhd8HUZG?cluster=devnet">5ngSct21…8HUZG ↗</a></dd>
+        <dt>Root</dt><dd><span class="mono">5d0cf47a…5732e8</span></dd>
+      </dl>
+    </div>
+    <figcaption>A receipt issued on devnet by the deployed gateway, 7 October 2026. Its id is all verify-receipt needs.</figcaption>
+  </figure>
+</section>
+
+<section class="leaf" aria-labelledby="quoted">
+  <div class="counterfoil">
+    <div class="field"><span class="label">Tariff</span><span class="value">0.002000</span><span class="note">to the publisher, exactly</span></div>
+    <div class="field"><span class="label">Protocol fee</span><span class="value">0.000200</span><span class="note">charged on top</span></div>
+  </div>
+  <div class="slip">
+    <h2 id="quoted">Quoted before served</h2>
+    <p>An unpaid request gets <code>402 Payment Required</code> naming the work, the use, the publisher’s tariff and the protocol fee as two separate amounts, and the ways this agent can pay. The publisher is paid the tariff, exactly; the fee is added on top. A source that is not registered is refused — it is never served for free.</p>
+    <p class="proof"><strong>0 of 70</strong>requests without a valid proof got content — 11 kinds, replays included. <small>Run M1, 6 Oct 2026.</small></p>
+  </div>
+</section>
+
+<section class="leaf" aria-labelledby="paid">
+  <div class="counterfoil">
+    <div class="field"><span class="label">Paid by</span><span class="mono value small">3gTX…wXj2</span></div>
+    <div class="field"><span class="label">Method</span><span class="value small">escrow voucher</span><span class="note">or x402</span></div>
+  </div>
+  <div class="slip">
+    <h2 id="paid">Paid in the same exchange</h2>
+    <div class="ways">
+      <div><h3>Escrow voucher</h3><p>Drawn on the agent’s own escrow. No transaction per request; receipts settle later, in batches. The operator key cannot draw beyond what the agent signed.</p></div>
+      <div><h3>x402</h3><p>One transfer for this one request, made before the content is released.</p></div>
+    </div>
+    <p class="proof"><strong>0.79 s · 0.82 s</strong>content back against a valid proof, p95, escrow and x402. <small>Run M1.</small></p>
+    <p class="proof miss"><strong>3.3 s</strong>the full x402 cycle, payment confirmation included, p95 — over a 3 s budget. Recorded as a miss.</p>
+  </div>
+</section>
+
+<section class="leaf" aria-labelledby="served">
+  <div class="counterfoil">
+    <div class="field"><span class="label">Content hash</span><span class="mono">2ac775117cfd1aee f43d31500e131872 93d25f9756910877 900745743ee966f4</span></div>
+    <div class="field"><span class="label">Registered hash</span><span class="value small sage">identical</span></div>
+  </div>
+  <div class="slip">
+    <h2 id="served">Served with the bytes on record</h2>
+    <p>The gateway proxies only sources registered on-chain: <code>source</code> is a registry key, not a URL it will fetch for anyone. It hashes the bytes it served and writes that hash into the receipt beside the one the publisher registered. A mismatch is marked on the receipt, not hidden.</p>
+  </div>
+</section>
+
+<section class="leaf" aria-labelledby="credited">
+  <div class="counterfoil">
+    <div class="field"><span class="label">Publisher</span><span class="value small">acme-news.test</span><span class="mono muted">payout 7ddM…7PQZ</span></div>
+    <div class="field"><span class="label">Credited</span><span class="value sage">+0.002000</span></div>
+  </div>
+  <div class="slip">
+    <h2 id="credited">Credited to the publisher</h2>
+    <p>The publisher signs in with their wallet and sees every arrival on their own works: who took what, for which use, for how much — and nothing that belongs to anyone else.</p>
+    <figure class="shots">
+      <div>
+        <img src="assets/acme-news.webp" width="960" height="675" loading="lazy" alt="Dashboard of acme-news.test during the M2 run: flows from agents to its works, its takings, and its recent arrivals.">
+        <img src="assets/kyiv-photo.webp" width="960" height="675" loading="lazy" alt="Dashboard of kyiv-photo.test during the same run, showing only its own works.">
+        <img src="assets/harbour-almanac.webp" width="960" height="675" loading="lazy" alt="Dashboard of harbour-almanac.test during the same run, showing only its own works.">
+      </div>
+      <figcaption>Three publishers signed in at once during run M2, 7 Oct 2026: acme-news.test, kyiv-photo.test, harbour-almanac.test.</figcaption>
+    </figure>
+    <p class="proof"><strong>879 ms</strong>from acceptance to the publisher’s feed, p95 — 300 of 300 arrivals, three publishers at once, none saw another’s row. <small>Run M2.</small></p>
+  </div>
+</section>
+
+<section class="leaf" aria-labelledby="settled">
+  <div class="counterfoil">
+    <div class="field"><span class="label">Batch</span><span class="value small">receipts 1–12</span><span class="mono muted">root 5d0cf47a…5732e8</span></div>
+    <div class="field live" id="last-batch" aria-live="polite">
+      <span class="label" data-part="label">Settled</span>
+      <span class="value small" data-part="when">7 Oct 2026, 11:46 UTC</span>
+      <span class="note"><span data-part="count">12 receipts</span> · <a class="mono" data-part="tx" href="https://explorer.solana.com/tx/5ngSct21ZxWje6S7KyABywizokDRwHwfaWaNoFHWnubAD3DDjBcjzKGc9WDq1JMeTTwWaNyiHj54bCiSAhd8HUZG?cluster=devnet">5ngS…HUZG ↗</a></span>
+      <span class="note" data-part="source">The batch of the receipt above.</span>
+    </div>
+  </div>
+  <div class="slip">
+    <h2 id="settled">Settled in a batch</h2>
+    <p>The settler gathers an agent’s receipts into one transaction. It pays every publisher’s tariff and the protocol fee, and writes the Merkle root of the batch into the on-chain log. A batch costs two signatures in network fees, whatever its size.</p>
+    <p class="proof"><strong>0.003 ¢</strong>per request, network fees included, with SOL at $120.37 — under 0.1 ¢ until SOL reaches $4,615. <small>Run M1.</small></p>
+    <p class="proof"><strong>0 apart</strong>payouts against payments, to the base unit, over 5,550,429 — on tariffs that do not divide evenly. <small>Run M1.</small></p>
+  </div>
+</section>
+
+<section class="leaf" aria-labelledby="checked">
+  <div class="counterfoil">
+    <div class="field"><span class="label">Check it</span><code class="command">pnpm --filter @contentledger/verify-receipt verify 36ba4b231e881d7e538d9230379f0ad09b37ff3cbfa6054272cee0c8e0d0f7c6</code></div>
+  </div>
+  <div class="slip">
+    <h2 id="checked">Checked against the chain</h2>
+    <div class="lines">
+      <p>The root and the payer’s chain are read from the network.</p>
+      <p>The receipt’s path leads to that root.</p>
+      <p>The published batch reproduces the agent’s hash chain.</p>
+      <p>The amounts add up to what the transaction debited.</p>
+    </div>
+    <p class="muted">The gateway supplies only the composition of the batch; every claim about money is checked on-chain.</p>
+    <p class="proof tested"><strong>Tested, not yet run at scale.</strong>The verifier’s suite forges each field in turn, and a batch invented whole — each fails one of the four checks.</p>
+  </div>
+</section>
+
+<section class="back" aria-labelledby="not-proved">
+  <div class="reverse">
+    <div class="reverse-head">
+      <h2 id="not-proved">What this receipt does not prove</h2>
+      <span class="label">Reverse</span>
+    </div>
+    <ul>
+      <li><strong class="claim">That the publisher owns the rights.</strong> <span>The registry records a claim; nobody checks it, and no court has seen one of these receipts.</span></li>
+      <li><strong class="claim">That the domain is theirs.</strong> <span>Domains are seeded by the operator’s script. Attestor nodes that would confirm a licence mark on the source are not running yet.</span></li>
+      <li><strong class="claim">That anyone can sign up.</strong> <span>Publishers cannot register themselves yet.</span></li>
+      <li><strong class="claim">That the money is real.</strong> <span>Devnet, and a test currency with six decimals — not Circle’s USDC.</span></li>
+      <li><strong class="claim">That the publishers are.</strong> <span>Made-up publishers on .test domains serve a fixture corpus.</span></li>
+      <li><strong class="claim">That nobody took the work without paying.</strong> <span>ContentLedger makes paying cheaper than going around. It does not detect scraping.</span></li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer class="colophon">
+  <a href="https://github.com/ContentLedger-crypto/ContentLedger">ContentLedger-crypto/ContentLedger</a>
+  <span>Program <a class="mono" href="https://explorer.solana.com/address/HFoHycv5MSCFizdb4GhPSYgLWFfwu1MgEW8qx8zuWKh2?cluster=devnet">HFoH…WKh2</a> · devnet</span>
+  <a href="https://github.com/ContentLedger-crypto/ContentLedger/blob/main/LICENSE">Apache-2.0</a>
+  <a href="https://github.com/ContentLedger-crypto/ContentLedger/issues">Questions and reports: GitHub issues</a>
+</footer>
+</div>
+
+<script>
+  // One read of the newest settled batch. No polling, no spinner: on any failure the
+  // counterfoil keeps the dated batch of the hero receipt, which is true either way.
+  ;(() => {
+    const meta = document.querySelector('meta[name="contentledger-api"]')
+    const api = meta ? meta.content.replace(/\/+$/, '') : ''
+    const field = document.getElementById('last-batch')
+    if (!/^https:\/\/[^%\s]+$/.test(api) || !field || typeof AbortSignal.timeout !== 'function') {
+      return
+    }
+    const part = (name) => field.querySelector(`[data-part="${name}"]`)
+    const ago = (at) => {
+      const seconds = Math.round((at.getTime() - Date.now()) / 1000)
+      const units = [
+        ['day', 86400],
+        ['hour', 3600],
+        ['minute', 60],
+      ]
+      const words = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+      for (const [unit, size] of units) {
+        if (Math.abs(seconds) >= size) return words.format(Math.round(seconds / size), unit)
+      }
+      return 'just now'
+    }
+    fetch(`${api}/v1/batches/latest`, { signal: AbortSignal.timeout(5000) })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((batch) => {
+        const at = new Date(batch.publishedAt)
+        const signature = String(batch.txSig)
+        const count = Number(batch.receipts)
+        if (Number.isNaN(at.getTime()) || !Number.isInteger(count) || count < 1) return
+        if (!/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(signature)) return
+        part('label').textContent = 'Last batch settled'
+        part('when').textContent = ago(at)
+        part('when').title = at.toISOString()
+        part('count').textContent = count === 1 ? '1 receipt' : `${count} receipts`
+        const tx = part('tx')
+        tx.href = `https://explorer.solana.com/tx/${signature}?cluster=devnet`
+        tx.textContent = `${signature.slice(0, 4)}…${signature.slice(-4)} ↗`
+        part('source').textContent = 'Read from the gateway when this page opened.'
+      })
+      .catch(() => {})
+  })()
+</script>
+</body>
+</html>

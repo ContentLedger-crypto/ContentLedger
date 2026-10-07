@@ -1,8 +1,10 @@
-# Дашборд видавця на GitHub Pages: https://contentledger-crypto.github.io/ContentLedger/
+# Сайт проекту на GitHub Pages: лендінг у корені, дашборд видавця в /app/.
+#   https://contentledger-crypto.github.io/ContentLedger/      apps/landing (статика, без збірки)
+#   https://contentledger-crypto.github.io/ContentLedger/app/  apps/web
 #
-# Публікується те, що є в apps/web на момент push у main. До M2 це прототип на
-# моках (M0) — жодних VITE_* тут не задано, і сторінка сама про це каже. Коли
-# зʼявиться шлюз, VITE_API_URL прийде з repository Variables, не з коду.
+# Адреса шлюзу — одна, VITE_API_URL з repository Variables: її читає збірка
+# дашборда і її ж підставляє лендінгу крок складання. Без змінної дашборд —
+# прев'ю на зразкових числах, а лендінг лишає вшитий батч без живого рядка.
 #
 # Rust тут не потрібен: IDL лежить копією в packages/chain і збирається з web.
 name: pages
@@ -40,8 +42,9 @@ jobs:
 
       - run: pnpm --filter @contentledger/web build
         env:
-          # Проектний сайт живе під /<repo>/, не в корені домену.
-          PAGES_BASE: /${{ github.event.repository.name }}/
+          # Проектний сайт живе під /<repo>/, а дашборд — у його /app/. Роутера
+          # в apps/web немає (один екран), тож 404.html для глибоких шляхів не треба.
+          PAGES_BASE: /${{ github.event.repository.name }}/app/
           # The hosted gateway, from repository Variables. Unset, the build is the
           # sign-in-free preview on sample figures, and the page says so itself.
           VITE_API_URL: ${{ vars.VITE_API_URL }}
@@ -52,9 +55,23 @@ jobs:
       # крок лише читає наявну конфігурацію.
       - uses: actions/configure-pages@v5
 
+      # Лендінг — у корінь як є, дашборд — у app/. Плейсхолдер адреси шлюзу
+      # лишається, коли змінна не задана: скрипт сторінки його розпізнає.
+      - name: Assemble the site
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          mkdir -p dist
+          cp -r apps/landing/. dist/
+          cp -r apps/web/dist dist/app
+          if [ -n "$VITE_API_URL" ]; then
+            sed -i "s|%VITE_API_URL%|${VITE_API_URL}|" dist/index.html
+          fi
+          grep -c 'name="contentledger-api"' dist/index.html
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: apps/web/dist
+          path: dist
 
   deploy:
     needs: build

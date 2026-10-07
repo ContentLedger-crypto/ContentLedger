@@ -1,0 +1,702 @@
+/* ContentLedger landing: the logo printed in negative, set as a cheque book.
+   Dark is the default (the dashboard behind the button is dark); light is the logo as printed. */
+
+:root {
+  --outside: #0a1429;
+  --book: #0e1a33;
+  --slip: #12224a;
+  --reverse: #0b1630;
+  --ink: #f0f0d8;
+  --muted: #9aa3b5;
+  --rule: #2a3654;
+  --rule-strong: #3a4a70;
+  --sage: #8fb3a3;
+  --terracotta: #c4795f;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --outside: #e4e4c8;
+    --book: #f0f0d8;
+    --slip: #f7f7e6;
+    --reverse: #e9e9cf;
+    --ink: #183060;
+    --muted: #4f5d78;
+    --rule: #c3c6ad;
+    --rule-strong: #a9ad94;
+    --sage: #2f6b55;
+    --terracotta: #a3492b;
+    color-scheme: light;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--outside);
+  color: var(--ink);
+  font-family: var(--serif);
+  line-height: 1.5;
+}
+
+p,
+h1,
+h2,
+h3,
+figure {
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 400;
+}
+
+a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--sage);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: 3px;
+}
+
+.skip {
+  position: absolute;
+  left: 16px;
+  top: -60px;
+  padding: 10px 14px;
+  background: var(--ink);
+  color: var(--book);
+  font-family: var(--sans);
+  z-index: 2;
+}
+
+.skip:focus {
+  top: 12px;
+}
+
+.sans {
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.sage {
+  color: var(--sage);
+}
+
+.label {
+  font-family: var(--sans);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.page {
+  padding: 0 24px 64px;
+}
+
+/* Header */
+
+.masthead {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 28px;
+  padding: 28px 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+  font-size: 23px;
+  letter-spacing: 0.01em;
+}
+
+.brand svg {
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+
+.status {
+  flex: 1 1 260px;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 11px 18px;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  font-family: var(--sans);
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.button.primary {
+  min-height: 48px;
+  padding: 14px 24px;
+  background: var(--ink);
+  color: var(--book);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.button.primary:hover {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: var(--book);
+}
+
+.button.quiet {
+  min-height: 48px;
+  padding: 14px 24px;
+  border-color: var(--rule-strong);
+  font-size: 16px;
+}
+
+/* The book */
+
+.book {
+  max-width: 1240px;
+  margin: 0 auto;
+  background: var(--book);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  /* Cuts the perforation notches to half-circles and keeps the guilloché inside the book. */
+  overflow: hidden;
+}
+
+/* Hero */
+
+.hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 48px 64px;
+  padding: 88px 64px 96px;
+}
+
+.hero-text {
+  flex: 999 1 480px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+h1 {
+  font-size: clamp(48px, 7vw, 76px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+}
+
+.lead {
+  font-size: 21px;
+  line-height: 1.55;
+  max-width: 34em;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding-top: 8px;
+}
+
+.receipt-figure {
+  flex: 1 1 440px;
+  max-width: 500px;
+  position: relative;
+}
+
+.guilloche {
+  position: absolute;
+  width: 132%;
+  left: -16%;
+  top: -14%;
+  opacity: 0.09;
+  pointer-events: none;
+}
+
+.receipt {
+  position: relative;
+  background: var(--slip);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 32px 32px 28px;
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.receipt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.receipt-head span:first-child {
+  font-family: var(--serif);
+  font-size: 28px;
+}
+
+.receipt-id {
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  padding: 14px 0;
+  border-bottom: 1px dotted var(--rule-strong);
+  overflow-wrap: anywhere;
+}
+
+.receipt dl {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 11px 16px;
+  margin: 0;
+  padding: 16px 0 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.receipt dt {
+  color: var(--muted);
+}
+
+.receipt dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.receipt .mono {
+  font-size: 13px;
+}
+
+.receipt-figure figcaption {
+  position: relative;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  padding-top: 14px;
+}
+
+/* Leaves: counterfoil | slip, perforated */
+
+.leaf {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  border-top: 2px dotted var(--rule);
+}
+
+.leaf::before,
+.leaf::after {
+  content: "";
+  position: absolute;
+  top: -14px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--outside);
+}
+
+.leaf::before {
+  left: -14px;
+}
+
+.leaf::after {
+  right: -14px;
+}
+
+.counterfoil {
+  flex: 1 1 240px;
+  max-width: 320px;
+  padding: 64px 40px 56px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field .value {
+  font-size: 26px;
+}
+
+.field .value.small {
+  font-size: 18px;
+}
+
+.field .note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.field .mono {
+  font-size: 13px;
+}
+
+.field.live {
+  gap: 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.slip {
+  flex: 999 1 560px;
+  min-width: 0;
+  padding: 64px 64px 56px;
+  border-left: 2px dotted var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+h2 {
+  font-size: 40px;
+  line-height: 1.15;
+}
+
+.slip > p,
+.lines {
+  font-size: 19px;
+  line-height: 1.6;
+  max-width: 38em;
+}
+
+.slip code {
+  font-family: var(--mono);
+  font-size: 16px;
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.ways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 48px;
+}
+
+.ways > div {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ways h3 {
+  font-size: 22px;
+}
+
+.ways p {
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.slip > p.proof {
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.proof strong {
+  font-weight: 400;
+  font-size: 30px;
+  color: var(--ink);
+  padding-right: 10px;
+}
+
+.proof.miss,
+.proof.miss strong {
+  color: var(--terracotta);
+}
+
+.proof small {
+  font-size: 13px;
+}
+
+.proof.tested strong {
+  font-size: 22px;
+}
+
+.command {
+  display: block;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  background: var(--outside);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 12px 14px;
+}
+
+.shots {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.shots > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.shots img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 960 / 675;
+  object-fit: cover;
+  object-position: top;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+}
+
+.shots figcaption {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* The back of the receipt */
+
+.back {
+  position: relative;
+  border-top: 2px dotted var(--rule);
+  padding: 64px;
+}
+
+.back::before,
+.back::after {
+  content: "";
+  position: absolute;
+  top: -14px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--outside);
+}
+
+.back::before {
+  left: -14px;
+}
+
+.back::after {
+  right: -14px;
+}
+
+.reverse {
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 44px 48px 48px;
+  background: var(--reverse);
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.reverse-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.reverse h2 {
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.reverse ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 56px;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.reverse .claim {
+  font-weight: 400;
+  font-size: 18px;
+}
+
+.reverse li span {
+  color: var(--muted);
+}
+
+/* Footer */
+
+.colophon {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 40px;
+  padding: 36px 0 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* Phone: the counterfoil stacks above the slip and the perforation turns horizontal */
+
+@media (max-width: 760px) {
+  .page {
+    padding: 0 16px 48px;
+  }
+
+  .masthead {
+    padding: 20px 0;
+  }
+
+  .status {
+    text-align: left;
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .hero {
+    padding: 48px 24px 56px;
+    gap: 40px;
+  }
+
+  .lead {
+    font-size: 19px;
+  }
+
+  .receipt {
+    padding: 24px 20px 20px;
+  }
+
+  .receipt-id {
+    font-size: 12px;
+    letter-spacing: 0;
+  }
+
+  .receipt dl {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .counterfoil {
+    max-width: none;
+    padding: 44px 24px 8px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 20px 40px;
+  }
+
+  .field.live {
+    flex-basis: 100%;
+  }
+
+  .slip {
+    padding: 24px 24px 44px;
+    border-left: 0;
+    border-top: 2px dotted var(--rule);
+    margin: 0 24px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  h2 {
+    font-size: 32px;
+  }
+
+  .slip > p,
+  .lines {
+    font-size: 18px;
+  }
+
+  .proof strong {
+    font-size: 26px;
+  }
+
+  .shots > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .back {
+    padding: 40px 16px;
+  }
+
+  .reverse {
+    padding: 28px 20px 32px;
+  }
+
+  .reverse ul {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+}
