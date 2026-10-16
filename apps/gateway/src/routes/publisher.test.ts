@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { domainPda, PROGRAM_ID } from '@contentledger/chain'
 import {
   acceptedAtColumns,
   domains,
@@ -7,9 +8,15 @@ import {
   sessions,
   works,
 } from '@contentledger/db'
-import { publisherSummarySchema, receiptsPageSchema } from '@contentledger/shared'
+import {
+  preparedRegistrationSchema,
+  publisherDomainsSchema,
+  publisherSummarySchema,
+  receiptsPageSchema,
+  registrationStatusSchema,
+} from '@contentledger/shared'
 import { PGlite } from '@electric-sql/pglite'
-import { PublicKey } from '@solana/web3.js'
+import { type AccountInfo, PublicKey, type SignatureStatus, Transaction } from '@solana/web3.js'
 import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
@@ -24,6 +31,7 @@ import { type PublisherDeps, publisherRoutes } from './publisher.js'
 
 const DASHBOARD = 'https://publisher.example'
 const NOW = new Date('2026-10-06T12:00:00.000Z')
+const BLOCKHASH = 'GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi'
 
 const key = (seed: number) => new PublicKey(new Uint8Array(32).fill(seed)).toBase58()
 const ALICE = key(1)
@@ -34,6 +42,11 @@ const TOKENS = { [ALICE]: 'a'.repeat(43), [BOB]: 'b'.repeat(43) }
 let db: ReturnType<typeof drizzle>
 let refuse: boolean
 let registry: OwnedWorksReader
+let chainState: {
+  accounts: Map<string, AccountInfo<Buffer>>
+  statuses: Array<SignatureStatus | null>
+  height: number
+}
 let nextReceipt = 0
 
 const limiter: RateLimiter = {
@@ -45,6 +58,21 @@ const deps = (): PublisherDeps => ({
   now: () => NOW,
   dashboardOrigin: DASHBOARD,
   registry,
+  registration: {
+    chain: {
+      getMultipleAccountsInfo: async (keys) =>
+        keys.map((k) => chainState.accounts.get(k.toBase58()) ?? null),
+      getLatestBlockhash: async () => ({ blockhash: BLOCKHASH, lastValidBlockHeight: 150 }),
+      getBlockHeight: async () => chainState.height,
+      getSignatureStatuses: async () => ({ context: { slot: 1 }, value: chainState.statuses }),
+    },
+    origin: {
+      fetch: async () => ({
+        bytes: new TextEncoder().encode('<p>tide</p>'),
+        mediaType: 'text/html',
+      }),
+    },
+  },
   limits: { addressOf: () => '203.0.113.9', publisher: limiter },
   feed: publisherFeed(db),
   streams: { maxPerAddress: 10, heartbeatMs: 15_000 },
@@ -73,7 +101,8 @@ beforeEach(async () => {
   await db.execute(sql`truncate receipts, works, domains, sessions cascade`)
   refuse = false
   nextReceipt = 0
-  registry = { countWorks: async () => 2 }
+  registry = { countWorks: async () => 2, ownedDomains: async () => [] }
+  chainState = { accounts: new Map(), statuses: [null], height: 100 }
   await db.insert(sessions).values(
     [ALICE, BOB].map((wallet) => ({
       tokenHash: sha256Hex(TOKENS[wallet] ?? ''),
@@ -237,6 +266,7 @@ describe('GET /v1/publisher/summary', () => {
   it('sums the period by work, consumer and flow, with the count of works registered on chain', async () => {
     const asked: string[] = []
     registry = {
+      ...registry,
       countWorks: async (owner) => {
         asked.push(owner)
         return 5
@@ -289,7 +319,7 @@ describe('GET /v1/publisher/summary', () => {
   })
 
   it('tells a publisher with nothing registered so, rather than an empty period', async () => {
-    registry = { countWorks: async () => 0 }
+    registry = { ...registry, countWorks: async () => 0 }
     const res = await get(`/v1/publisher/summary${period}`, BOB)
     expect(await res.json()).toEqual({
       total: '0',
@@ -306,6 +336,7 @@ describe('GET /v1/publisher/summary', () => {
   it('still answers when the chain cannot be read, without leaking the RPC key', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     registry = {
+      ...registry,
       countWorks: async () => {
         throw new Error('fetch https://devnet.helius-rpc.com/?api-key=SECRET failed')
       },
@@ -387,5 +418,154 @@ describe('guards', () => {
   it('does not let another site read the API', async () => {
     const res = await preflight('https://evil.example')
     expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+  })
+})
+
+describe('registration routes', () => {
+  const post = (body: unknown, wallet?: string, raw?: string) =>
+    createApp(publisherRoutes(deps())).request('/v1/publisher/registrations', {
+      method: 'POST',
+      headers: {
+        Origin: DASHBOARD,
+        'Content-Type': 'application/json',
+        ...(wallet === undefined ? {} : { Authorization: `Bearer ${TOKENS[wallet]}` }),
+      },
+      body: raw ?? JSON.stringify(body),
+    })
+
+  const domainBody = {
+    kind: 'domain',
+    host: 'tide-notes.test',
+    rateTrain: '2000',
+    rateInference: '500',
+  }
+  const SIGNATURE = '5'.repeat(88)
+
+  it("lists the session wallet's domains from the chain, money as base-unit strings", async () => {
+    const asked: string[] = []
+    registry = {
+      ...registry,
+      ownedDomains: async (owner) => {
+        asked.push(owner)
+        return [
+          {
+            address: key(31),
+            account: {
+              owner,
+              payoutOwner: owner,
+              host: 'alice.test',
+              rateTrain: 2000n,
+              rateInference: 0n,
+              status: 'suspended',
+              bump: 254,
+            },
+            works: 3,
+          },
+        ]
+      },
+    }
+    const res = await get('/v1/publisher/domains', ALICE)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(publisherDomainsSchema.safeParse(body).success).toBe(true)
+    expect(body).toEqual({
+      domains: [
+        {
+          address: key(31),
+          host: 'alice.test',
+          rateTrain: '2000',
+          rateInference: '0',
+          status: 'suspended',
+          works: 3,
+        },
+      ],
+    })
+    expect(asked).toEqual([ALICE])
+  })
+
+  it('prepares a transaction for the session wallet to sign', async () => {
+    const res = await post(domainBody, ALICE)
+    expect(res.status).toBe(200)
+    const prepared = preparedRegistrationSchema.parse(await res.json())
+    expect(prepared.lastValidBlockHeight).toBe(150)
+    const tx = Transaction.from(Buffer.from(prepared.transaction, 'base64'))
+    expect(tx.feePayer?.toBase58()).toBe(ALICE)
+  })
+
+  it('names the reason a registration is refused', async () => {
+    chainState.accounts.set(domainPda('tide-notes.test')[0].toBase58(), {
+      data: Buffer.alloc(0),
+      executable: false,
+      lamports: 1,
+      owner: PROGRAM_ID,
+      rentEpoch: 0,
+    })
+    const res = await post(domainBody, BOB)
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({
+      error: {
+        code: 'REGISTRATION_REFUSED',
+        message: 'registration refused',
+        details: { reason: 'domain-taken' },
+      },
+    })
+  })
+
+  it('rejects a malformed body, an unknown field and broken JSON with 400', async () => {
+    for (const res of [
+      await post({ ...domainBody, rateTrain: 2000 }, ALICE),
+      await post({ ...domainBody, owner: BOB }, ALICE),
+      await post(undefined, ALICE, '{"kind":'),
+    ]) {
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: { code: 'INVALID_INPUT' } })
+    }
+  })
+
+  it('requires a session for every registration route', async () => {
+    expect((await get('/v1/publisher/domains')).status).toBe(401)
+    expect((await post(domainBody)).status).toBe(401)
+    expect(
+      (await get(`/v1/publisher/registrations/${SIGNATURE}?lastValidBlockHeight=150`)).status,
+    ).toBe(401)
+  })
+
+  it('reports where a signed registration stands', async () => {
+    chainState.statuses = [
+      { slot: 1, confirmations: null, err: null, confirmationStatus: 'confirmed' },
+    ]
+    const res = await get(
+      `/v1/publisher/registrations/${SIGNATURE}?lastValidBlockHeight=150`,
+      ALICE,
+    )
+    expect(res.status).toBe(200)
+    expect(registrationStatusSchema.parse(await res.json())).toEqual({ state: 'confirmed' })
+  })
+
+  it('rejects a status query without a valid signature or block height', async () => {
+    for (const path of [
+      `/v1/publisher/registrations/${'0'.repeat(88)}?lastValidBlockHeight=150`,
+      `/v1/publisher/registrations/${SIGNATURE}`,
+      `/v1/publisher/registrations/${SIGNATURE}?lastValidBlockHeight=-1`,
+      `/v1/publisher/registrations/${SIGNATURE}?lastValidBlockHeight=150&lastValidBlockHeight=151`,
+      `/v1/publisher/registrations/${SIGNATURE}?lastValidBlockHeight=150&commitment=processed`,
+    ]) {
+      expect((await get(path, ALICE)).status, path).toBe(400)
+    }
+  })
+
+  it('lets the dashboard post JSON across origins', async () => {
+    const res = await createApp(publisherRoutes(deps())).request('/v1/publisher/registrations', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: DASHBOARD,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization,content-type',
+      },
+    })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(DASHBOARD)
+    expect(res.headers.get('Access-Control-Allow-Methods')).toContain('POST')
+    expect(res.headers.get('Access-Control-Allow-Headers')?.toLowerCase()).toContain('content-type')
   })
 })

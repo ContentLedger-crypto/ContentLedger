@@ -249,7 +249,11 @@ describe('rpcOwnedWorks', () => {
               return data.subarray(at, at + bytes.length).equals(Buffer.from(bytes))
             }),
           )
-          .map(({ pubkey, data }) => ({ pubkey, account: account(data.subarray(0, 0)) }))
+          .map(({ pubkey, data }) => {
+            const slice = config.dataSlice
+            const served = slice ? data.subarray(slice.offset, slice.offset + slice.length) : data
+            return { pubkey, account: account(served) }
+          })
       },
     }
   }
@@ -309,5 +313,50 @@ describe('rpcOwnedWorks', () => {
       },
     }
     await expect(rpcOwnedWorks(rpc).countWorks(ALICE.toBase58())).rejects.toThrow('429')
+  })
+
+  it('lists the domains the wallet owns, by host, with the works under each', async () => {
+    const rpc = cluster(await registry())
+    const owned = await rpcOwnedWorks(rpc).ownedDomains(ALICE.toBase58())
+    expect(
+      owned.map(({ address, account, works }) => ({
+        address,
+        host: account.host,
+        payoutOwner: account.payoutOwner,
+        works,
+      })),
+    ).toEqual([
+      {
+        address: domainPda('alice.org')[0].toBase58(),
+        host: 'alice.org',
+        payoutOwner: BOB.toBase58(),
+        works: 1,
+      },
+      {
+        address: domainPda('alice.test')[0].toBase58(),
+        host: 'alice.test',
+        payoutOwner: ALICE.toBase58(),
+        works: 2,
+      },
+    ])
+  })
+
+  it('lists no domain for a wallet that is only somebody else’s payout', async () => {
+    const rpc = cluster(await registry())
+    expect(await rpcOwnedWorks(rpc).ownedDomains(key(43).toBase58())).toEqual([])
+    const bob = await rpcOwnedWorks(rpc).ownedDomains(BOB.toBase58())
+    expect(bob.map(({ account }) => account.host)).toEqual(['bob.test'])
+  })
+
+  it('reads whole domains but only the addresses of works', async () => {
+    const rpc = cluster(await registry())
+    await rpcOwnedWorks(rpc).ownedDomains(ALICE.toBase58())
+    const [domains, ...works] = rpc.calls
+    expect(domains).toMatchObject({ commitment: 'confirmed' })
+    expect(domains?.dataSlice).toBeUndefined()
+    expect(works).toHaveLength(2)
+    for (const call of works) {
+      expect(call).toMatchObject({ commitment: 'confirmed', dataSlice: { offset: 0, length: 0 } })
+    }
   })
 })

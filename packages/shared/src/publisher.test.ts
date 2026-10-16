@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  preparedRegistrationSchema,
+  publisherDomainsSchema,
   publisherReceiptSchema,
   publisherSummarySchema,
   receiptsPageSchema,
+  registrationRequestSchema,
+  registrationStatusSchema,
   settlementEventSchema,
 } from './publisher.js'
 
@@ -189,5 +193,99 @@ describe('stream events', () => {
       receiptIds: [],
     })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('registration', () => {
+  it('reads a domain request with both rates as base units', () => {
+    const request = registrationRequestSchema.parse({
+      kind: 'domain',
+      host: 'tide-notes.test',
+      rateTrain: '2000',
+      rateInference: '0',
+    })
+    expect(request).toEqual({
+      kind: 'domain',
+      host: 'tide-notes.test',
+      rateTrain: 2000n,
+      rateInference: 0n,
+    })
+  })
+
+  it('keeps an inherited work rate distinct from a free one', () => {
+    const request = registrationRequestSchema.parse({
+      kind: 'work',
+      source: 'https://tide-notes.test/a.html',
+      rateTrain: null,
+      rateInference: '0',
+    })
+    expect(request).toMatchObject({ rateTrain: null, rateInference: 0n })
+  })
+
+  it('rejects a domain without a rate, since a domain has nothing to inherit from', () => {
+    const result = registrationRequestSchema.safeParse({
+      kind: 'domain',
+      host: 'tide-notes.test',
+      rateTrain: null,
+      rateInference: '500',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects an absent work rate rather than reading it as inherited', () => {
+    const result = registrationRequestSchema.safeParse({
+      kind: 'work',
+      source: 'https://tide-notes.test/a.html',
+      rateTrain: '100',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects an unknown kind, an extra field and a rate that is not base units', () => {
+    const domain = { kind: 'domain', host: 'tide-notes.test', rateTrain: '1', rateInference: '1' }
+    for (const body of [
+      { ...domain, kind: 'publisher' },
+      { ...domain, owner: 'Kzb7q9Np5Zr9QBo7iafi2yCBisiHJg7r7HezzgvbuQ2T' },
+      { ...domain, rateTrain: '0.5' },
+      { ...domain, rateTrain: '-1' },
+    ]) {
+      expect(registrationRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false)
+    }
+  })
+
+  it('names why a landed transaction failed, and nothing else alongside', () => {
+    expect(
+      registrationStatusSchema.parse({ state: 'failed', reason: 'already-registered' }),
+    ).toEqual({ state: 'failed', reason: 'already-registered' })
+    expect(registrationStatusSchema.safeParse({ state: 'failed' }).success).toBe(false)
+    expect(registrationStatusSchema.safeParse({ state: 'landed' }).success).toBe(false)
+  })
+
+  it('reads a prepared transaction and refuses one that is not base64', () => {
+    const prepared = {
+      transaction: 'AQAAAA==',
+      address: 'BUHqsiLM6HyUEKrdVAtWQ1KG9K9oKJJAJXjUv3fFmHLp',
+      lastValidBlockHeight: 412_000_150,
+    }
+    expect(preparedRegistrationSchema.parse(prepared)).toEqual(prepared)
+    expect(
+      preparedRegistrationSchema.safeParse({ ...prepared, transaction: 'not base64!' }).success,
+    ).toBe(false)
+  })
+
+  it("lists a wallet's domains with their rates and the number of works under each", () => {
+    const listing = publisherDomainsSchema.parse({
+      domains: [
+        {
+          address: 'BUHqsiLM6HyUEKrdVAtWQ1KG9K9oKJJAJXjUv3fFmHLp',
+          host: 'tide-notes.test',
+          rateTrain: '2000',
+          rateInference: '500',
+          status: 'suspended',
+          works: 0,
+        },
+      ],
+    })
+    expect(listing.domains[0]).toMatchObject({ rateTrain: 2000n, status: 'suspended', works: 0 })
   })
 })

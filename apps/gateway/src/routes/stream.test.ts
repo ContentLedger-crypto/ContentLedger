@@ -78,7 +78,16 @@ beforeEach(async () => {
       db,
       now: () => new Date(),
       dashboardOrigin: DASHBOARD,
-      registry: { countWorks: async () => 0 },
+      registry: { countWorks: async () => 0, ownedDomains: async () => [] },
+      registration: {
+        chain: {
+          getMultipleAccountsInfo: async () => [],
+          getLatestBlockhash: async () => ({ blockhash: '', lastValidBlockHeight: 0 }),
+          getBlockHeight: async () => 0,
+          getSignatureStatuses: async () => ({ context: { slot: 0 }, value: [] }),
+        },
+        origin: { fetch: async () => ({ bytes: new Uint8Array(), mediaType: '' }) },
+      },
       limits: { addressOf: () => '203.0.113.9', publisher: { take: () => ({ ok: true }) } },
       feed,
       streams: { maxPerAddress: MAX_STREAMS, heartbeatMs: HEARTBEAT_MS },

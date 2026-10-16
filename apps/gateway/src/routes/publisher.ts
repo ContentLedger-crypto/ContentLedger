@@ -1,9 +1,17 @@
-import type { receiptsPageSchema } from '@contentledger/shared'
+import {
+  base58SignatureSchema,
+  type preparedRegistrationSchema,
+  type publisherDomainsSchema,
+  type receiptsPageSchema,
+  registrationRequestSchema,
+  type registrationStatusSchema,
+} from '@contentledger/shared'
 import { type Context, Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { z } from 'zod'
 import { redactKeys } from '../app.js'
 import { apiError, errorChain } from '../errors.js'
+import type { ContentOrigin } from '../origin.js'
 import type { Feed } from '../publisher/feed.js'
 import {
   listReceipts,
@@ -13,6 +21,12 @@ import {
   summaryJson,
   summaryParams,
 } from '../publisher/queries.js'
+import {
+  prepareRegistration,
+  type RegistrationChain,
+  registrationStatus,
+  type SignatureChain,
+} from '../publisher/registration.js'
 import type { RateLimiter } from '../rate-limit.js'
 import type { OwnedWorksReader } from '../registry.js'
 import type { Database } from '../store.js'
@@ -24,6 +38,7 @@ export interface PublisherDeps {
   now: () => Date
   dashboardOrigin: string
   registry: OwnedWorksReader
+  registration: { chain: RegistrationChain & SignatureChain; origin: ContentOrigin }
   limits: {
     addressOf: (c: Context) => string
     /** By client address and ahead of the session check: a guessed token still costs a lookup. */
@@ -40,6 +55,7 @@ export function publisherRoutes({
   now,
   dashboardOrigin,
   registry,
+  registration,
   limits,
   feed,
   streams,
@@ -50,7 +66,11 @@ export function publisherRoutes({
 
   app.use(
     '/v1/publisher/*',
-    cors({ origin: dashboardOrigin, allowMethods: ['GET'], allowHeaders: ['Authorization'] }),
+    cors({
+      origin: dashboardOrigin,
+      allowMethods: ['GET', 'POST'],
+      allowHeaders: ['Authorization', 'Content-Type'],
+    }),
   )
   app.use('/v1/publisher/*', async (c, next) => {
     const allowed = limits.publisher.take(limits.addressOf(c))
@@ -90,6 +110,54 @@ export function publisherRoutes({
     return c.json(summaryJson(summary, registeredWorks))
   })
 
+  app.get('/v1/publisher/domains', session, async (c) => {
+    const owned = await registry.ownedDomains(c.get('wallet'))
+    return c.json({
+      domains: owned.map(({ address, account, works }) => ({
+        address,
+        host: account.host,
+        rateTrain: account.rateTrain.toString(),
+        rateInference: account.rateInference.toString(),
+        status: account.status,
+        works,
+      })),
+    } satisfies z.input<typeof publisherDomainsSchema>)
+  })
+
+  app.post('/v1/publisher/registrations', session, async (c) => {
+    const body = registrationRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) {
+      return c.json(
+        apiError('INVALID_INPUT', 'invalid body', { issues: z.flattenError(body.error) }),
+        400,
+      )
+    }
+
+    const result = await prepareRegistration(c.get('wallet'), body.data, registration)
+    if (!result.ok) {
+      return c.json(
+        apiError('REGISTRATION_REFUSED', 'registration refused', { reason: result.reason }),
+        422,
+      )
+    }
+    return c.json(result.prepared satisfies z.input<typeof preparedRegistrationSchema>)
+  })
+
+  app.get('/v1/publisher/registrations/:signature', session, async (c) => {
+    const params = statusParams.safeParse({
+      signature: c.req.param('signature'),
+      ...queryOf(c),
+    })
+    if (!params.success) return invalid(c, params.error)
+
+    const status = await registrationStatus(
+      params.data.signature,
+      params.data.lastValidBlockHeight,
+      registration.chain,
+    )
+    return c.json(status satisfies z.input<typeof registrationStatusSchema>)
+  })
+
   app.get(
     '/v1/publisher/stream',
     session,
@@ -107,6 +175,11 @@ const queryOf = (c: Context) =>
       values.length === 1 ? values[0] : values,
     ]),
   )
+
+const statusParams = z.strictObject({
+  signature: base58SignatureSchema,
+  lastValidBlockHeight: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+})
 
 const invalid = (c: Context, error: z.ZodError) =>
   c.json(apiError('INVALID_INPUT', 'invalid query', { issues: z.flattenError(error) }), 400)

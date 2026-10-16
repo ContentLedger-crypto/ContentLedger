@@ -75,13 +75,15 @@ const addressOf = clientAddress(
   (c) => getConnInfo(c).remote.address ?? 'unknown',
 )
 
+const origin = fixturesOrigin(env.FIXTURES_BASE_URL)
+
 const app = createApp(
   healthRoutes({ db, now }),
   quoteRoutes(registry),
   contentRoutes({
     registry,
     db,
-    origin: fixturesOrigin(env.FIXTURES_BASE_URL),
+    origin,
     offers: offerStore({ ttlMs: OFFER_TTL_MS, maxBytes: OFFER_MAX_BYTES, now }),
     payments: rpcPayments(env.SOLANA_RPC_URL),
     now,
@@ -105,6 +107,7 @@ const app = createApp(
     now,
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     registry: rpcOwnedWorks(connection),
+    registration: { chain: connection, origin },
     limits: { addressOf, publisher: tokenBucket({ ...PUBLISHER_READS, now: clock }) },
     feed,
     streams: STREAMS,

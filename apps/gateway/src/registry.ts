@@ -119,15 +119,22 @@ function escrowSnapshot(
   }
 }
 
+export interface OwnedDomain {
+  address: string
+  account: Domain
+  works: number
+}
+
 export interface OwnedWorksReader {
   countWorks(owner: string): Promise<number>
+  ownedDomains(owner: string): Promise<OwnedDomain[]>
 }
 
 interface ProgramAccountsReader {
   getProgramAccounts(
     programId: PublicKey,
     config: GetProgramAccountsConfig,
-  ): Promise<ReadonlyArray<{ pubkey: PublicKey }>>
+  ): Promise<ReadonlyArray<{ pubkey: PublicKey; account: { data: Buffer } }>>
 }
 
 // Both accounts open with an 8-byte discriminator followed by the key we filter on:
@@ -140,15 +147,16 @@ const KEY_OFFSET = 8
  * been served, so a publisher who has just registered would be told they have none.
  */
 export function rpcOwnedWorks(connection: ProgramAccountsReader): OwnedWorksReader {
-  const addresses = (account: 'Domain' | 'Work', key: string) =>
+  const accounts = (account: 'Domain' | 'Work', key: string, withData: boolean) =>
     connection.getProgramAccounts(PROGRAM_ID, {
       commitment: 'confirmed',
-      dataSlice: { offset: 0, length: 0 },
+      ...(withData ? {} : { dataSlice: { offset: 0, length: 0 } }),
       filters: [
         { memcmp: coder.accounts.memcmp(account) as { offset: number; bytes: string } },
         { memcmp: { offset: KEY_OFFSET, bytes: key } },
       ],
     })
+  const addresses = (account: 'Domain' | 'Work', key: string) => accounts(account, key, false)
 
   return {
     async countWorks(owner) {
@@ -157,6 +165,18 @@ export function rpcOwnedWorks(connection: ProgramAccountsReader): OwnedWorksRead
         domains.map(({ pubkey }) => addresses('Work', pubkey.toBase58())),
       )
       return works.reduce((sum, list) => sum + list.length, 0)
+    },
+
+    async ownedDomains(owner) {
+      const domains = await accounts('Domain', owner, true)
+      const owned = await Promise.all(
+        domains.map(async ({ pubkey, account }) => ({
+          address: pubkey.toBase58(),
+          account: decodeDomain(account.data),
+          works: (await addresses('Work', pubkey.toBase58())).length,
+        })),
+      )
+      return owned.sort((a, b) => (a.account.host < b.account.host ? -1 : 1))
     },
   }
 }

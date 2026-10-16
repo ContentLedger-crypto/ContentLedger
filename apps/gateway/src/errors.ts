@@ -4,6 +4,7 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'NOT_LICENSED'
   | 'PAYMENT_REQUIRED'
+  | 'REGISTRATION_REFUSED'
   | 'RATE_LIMITED'
   | 'INTERNAL'
 
