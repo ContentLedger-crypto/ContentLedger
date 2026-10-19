@@ -7,12 +7,13 @@ import {
   type FeedEvent,
   publicationApiFor,
   publisherApiFor,
+  RegistrationRefused,
   sampleOpening,
   samplePublication,
   sampleSource,
   sampleSummary,
 } from './api'
-import { SUMMARY } from './mock'
+import { DOMAINS, SUMMARY } from './mock'
 
 const sum = (amounts: readonly bigint[]) => amounts.reduce((total, amount) => total + amount, 0n)
 
@@ -208,6 +209,93 @@ describe('publisherApiFor', () => {
     await expect(limited.summary({ from: new Date(0), to: new Date(1) }, signal)).rejects.toEqual(
       new ApiError(429, 'RATE_LIMITED', 2),
     )
+  })
+
+  it('reads the wallet’s domains with the session token', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json(DOMAINS))
+
+    const { domains } = await publisherApiFor('', 'tok', fetcher).domains(signal)
+
+    expect(domains[0]).toMatchObject({ host: 'atlasquarterly.org', rateTrain: 1500n, works: 5 })
+    const [url, init] = fetcher.mock.calls[0] ?? []
+    expect(url).toBe('/v1/publisher/domains')
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer tok')
+  })
+
+  it('posts a registration with money as base-unit strings and an inherited rate as null', async () => {
+    const prepared = {
+      transaction: 'AQID',
+      address: 'FCACSUUdntxKB1sAqoyvZ6b7EQRGmcwdBY5dkWEdgxME',
+      lastValidBlockHeight: 4242,
+    }
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json(prepared))
+
+    const answer = await publisherApiFor('https://gw.example', 'tok', fetcher).prepare(
+      { kind: 'work', source: 'https://a.org/w', rateTrain: null, rateInference: 2n ** 64n - 1n },
+      signal,
+    )
+
+    expect(answer).toEqual(prepared)
+    const [url, init] = fetcher.mock.calls[0] ?? []
+    expect(url).toBe('https://gw.example/v1/publisher/registrations')
+    expect(init?.method).toBe('POST')
+    const headers = new Headers(init?.headers)
+    expect(headers.get('Authorization')).toBe('Bearer tok')
+    expect(headers.get('Content-Type')).toBe('application/json')
+    expect(JSON.parse(String(init?.body))).toEqual({
+      kind: 'work',
+      source: 'https://a.org/w',
+      rateTrain: null,
+      rateInference: '18446744073709551615',
+    })
+  })
+
+  it('turns a named refusal into its reason, and carries any other refusal as it came', async () => {
+    const refusing = (body: unknown, status: number) =>
+      publisherApiFor('', 'tok', async () => Response.json(body, { status }))
+    const request = { kind: 'domain', host: 'a.org', rateTrain: 1n, rateInference: 1n } as const
+
+    await expect(
+      refusing(
+        {
+          error: {
+            code: 'REGISTRATION_REFUSED',
+            message: 'x',
+            details: { reason: 'domain-taken' },
+          },
+        },
+        422,
+      ).prepare(request, signal),
+    ).rejects.toEqual(new RegistrationRefused('domain-taken'))
+
+    // A reason this dashboard does not know yet is not mistaken for one it does.
+    await expect(
+      refusing(
+        {
+          error: { code: 'REGISTRATION_REFUSED', message: 'x', details: { reason: 'new-reason' } },
+        },
+        422,
+      ).prepare(request, signal),
+    ).rejects.toEqual(new ApiError(422, 'REGISTRATION_REFUSED', null, 'new-reason'))
+
+    await expect(
+      refusing({ error: { code: 'UNAUTHORIZED', message: 'x' } }, 401).prepare(request, signal),
+    ).rejects.toEqual(new ApiError(401, 'UNAUTHORIZED', null))
+  })
+
+  it('asks the state of a signed registration with the height it must land by', async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ state: 'failed', reason: 'already-registered' }),
+    )
+    const signature =
+      'U7kAUVNnP6cCjvyAV9P9i6PqJcmnrHZeP8hmrFhvnXS27F3awFVYB2Acx8FfKUTDAaK9JCEycor6BzmZmxEdrwL7'
+
+    const status = await publisherApiFor('', 'tok', fetcher).status(signature, 4242, signal)
+
+    expect(status).toEqual({ state: 'failed', reason: 'already-registered' })
+    const [url, init] = fetcher.mock.calls[0] ?? []
+    expect(url).toBe(`/v1/publisher/registrations/${signature}?lastValidBlockHeight=4242`)
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer tok')
   })
 
   it('ends with an error when an event breaks the contract', async () => {

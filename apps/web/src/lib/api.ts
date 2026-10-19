@@ -4,19 +4,28 @@ import {
   chainStep,
   merkleProof,
   merkleRoot,
+  type PreparedRegistration,
   type PublicBatch,
   type PublicReceipt,
+  type PublisherDomains,
   type PublisherReceipt,
   type PublisherSummary,
+  preparedRegistrationSchema,
   publicBatchSchema,
   publicReceiptSchema,
+  publisherDomainsSchema,
   publisherReceiptSchema,
   publisherSummarySchema,
   type ReceiptsPage,
+  type RegistrationRefusal,
+  type RegistrationRequest,
+  type RegistrationStatus,
   receiptBodySchema,
   receiptId,
   receiptLeaf,
   receiptsPageSchema,
+  registrationRefusalSchema,
+  registrationStatusSchema,
   type SettlementEvent,
   sessionGrantSchema,
   settlementEventSchema,
@@ -25,6 +34,7 @@ import bs58 from 'bs58'
 import { z } from 'zod'
 import type { AuthApi } from '@/auth/session'
 import {
+  DOMAINS,
   INCOMING,
   INCOMING_INTERVAL_MS,
   RECEIPTS,
@@ -72,20 +82,33 @@ export class ApiError extends Error {
   readonly code: string | null
   /** Seconds, from a 429's `details.retryAfter`. */
   readonly retryAfter: number | null
+  /** Why, from `details.reason`: what a 422 names. */
+  readonly reason: string | null
 
-  constructor(status: number, code: string | null, retryAfter: number | null) {
+  constructor(
+    status: number,
+    code: string | null,
+    retryAfter: number | null,
+    reason: string | null = null,
+  ) {
     super(`gateway answered ${status}${code === null ? '' : ` ${code}`}`)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.retryAfter = retryAfter
+    this.reason = reason
   }
 }
 
 const refusalSchema = z.object({
   error: z.object({
     code: z.string(),
-    details: z.object({ retryAfter: z.number().int().positive().optional() }).optional(),
+    details: z
+      .object({
+        retryAfter: z.number().int().positive().optional(),
+        reason: z.string().optional(),
+      })
+      .optional(),
   }),
 })
 
@@ -96,8 +119,20 @@ async function refusalOf(response: Response): Promise<ApiError> {
         response.status,
         refusal.data.error.code,
         refusal.data.error.details?.retryAfter ?? null,
+        refusal.data.error.details?.reason ?? null,
       )
     : new ApiError(response.status, null, null)
+}
+
+/** The gateway checked a registration and named why it will not prepare it. */
+export class RegistrationRefused extends Error {
+  readonly reason: RegistrationRefusal
+
+  constructor(reason: RegistrationRefusal) {
+    super(`registration refused: ${reason}`)
+    this.name = 'RegistrationRefused'
+    this.reason = reason
+  }
 }
 
 const defaultFetch: typeof fetch = (input, init) => fetch(input, init)
@@ -146,7 +181,19 @@ export interface SummarySource {
   summary(period: PeriodWindow, signal: AbortSignal): Promise<PublisherSummary>
 }
 
-export type PublisherSource = FeedSource & SummarySource
+/** Registration in three calls: what the wallet owns, a transaction to sign, its fate. */
+export interface RegistrationSource {
+  domains(signal: AbortSignal): Promise<PublisherDomains>
+  /** Rejects with `RegistrationRefused` when the gateway names a reason. */
+  prepare(request: RegistrationRequest, signal: AbortSignal): Promise<PreparedRegistration>
+  status(
+    signature: string,
+    lastValidBlockHeight: number,
+    signal: AbortSignal,
+  ): Promise<RegistrationStatus>
+}
+
+export type PublisherSource = FeedSource & SummarySource & RegistrationSource
 
 export function publisherApiFor(
   apiUrl: string,
@@ -155,7 +202,44 @@ export function publisherApiFor(
 ): PublisherSource {
   const authorization = { Authorization: `Bearer ${token}` }
 
+  async function get<S extends z.ZodType>(schema: S, path: string, signal: AbortSignal) {
+    const response = await fetcher(`${apiUrl}${path}`, { headers: authorization, signal })
+    if (!response.ok) throw await refusalOf(response)
+    return schema.parse(await response.json()) as z.output<S>
+  }
+
   return {
+    domains: (signal) => get(publisherDomainsSchema, '/v1/publisher/domains', signal),
+
+    async prepare(request, signal) {
+      const response = await fetcher(`${apiUrl}/v1/publisher/registrations`, {
+        method: 'POST',
+        headers: { ...authorization, 'Content-Type': 'application/json' },
+        body: JSON.stringify(request, (_, value) =>
+          typeof value === 'bigint' ? value.toString() : value,
+        ),
+        signal,
+      })
+      if (!response.ok) {
+        const refusal = await refusalOf(response)
+        const reason = registrationRefusalSchema.safeParse(refusal.reason)
+        if (refusal.code === 'REGISTRATION_REFUSED' && reason.success) {
+          throw new RegistrationRefused(reason.data)
+        }
+        throw refusal
+      }
+      return preparedRegistrationSchema.parse(await response.json())
+    },
+
+    status: (signature, lastValidBlockHeight, signal) =>
+      get(
+        registrationStatusSchema,
+        `/v1/publisher/registrations/${signature}?${new URLSearchParams({
+          lastValidBlockHeight: String(lastValidBlockHeight),
+        })}`,
+        signal,
+      ),
+
     async summary({ from, to }, signal) {
       const query = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() })
       const response = await fetcher(`${apiUrl}/v1/publisher/summary?${query}`, {
@@ -233,12 +317,23 @@ function feedEventOf(name: string, data: string): FeedEvent | null {
 
 export const sampleSummary = publisherSummarySchema.parse(SUMMARY)
 
+const sampleDomains = publisherDomainsSchema.parse(DOMAINS)
+
+const PREVIEW_CANNOT_REGISTER = 'the preview has no gateway to register with'
+
 /**
  * The preview's ledger: one page, then six arrivals four seconds apart, then silence. The
  * summary is the same sample whatever the period: the preview has no history to cut.
  */
 export const sampleSource: PublisherSource = {
   summary: async () => sampleSummary,
+  domains: async () => sampleDomains,
+  prepare: async () => {
+    throw new Error(PREVIEW_CANNOT_REGISTER)
+  },
+  status: async () => {
+    throw new Error(PREVIEW_CANNOT_REGISTER)
+  },
   receipts: async () => receiptsPageSchema.parse(RECEIPTS),
   stream: (onEvent, signal) =>
     new Promise((_, reject) => {

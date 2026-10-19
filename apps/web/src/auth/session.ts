@@ -6,12 +6,15 @@ import {
   sessionGrantSchema,
 } from '@contentledger/shared'
 import bs58 from 'bs58'
+import { z } from 'zod'
 import { ApiError } from '@/lib/api'
 
 export interface Session {
   readonly wallet: string
   readonly token: string
   readonly expiresAt: Date
+  /** The cluster the gateway signed this session in on, `solana:devnet`: where its transactions go. */
+  readonly chain: string
 }
 
 /** `sessionStorage`: one session per tab, so three tabs can hold three publishers. */
@@ -47,7 +50,10 @@ export class SignInError extends Error {
 }
 
 const KEY = 'contentledger.session'
-const storedSchema = sessionGrantSchema.extend({ wallet: base58KeySchema })
+const storedSchema = sessionGrantSchema.extend({
+  wallet: base58KeySchema,
+  chain: z.string().startsWith('solana:'),
+})
 
 export function loadSession(store: SessionStore, now: Date): Session | null {
   let raw: string | null
@@ -112,7 +118,12 @@ export async function signInWith(wallet: SigningWallet, api: AuthApi): Promise<S
     nonce: input.nonce,
     signature: bs58.encode(signature),
   })
-  return { wallet: address, token: grant.token, expiresAt: new Date(grant.expiresAt) }
+  return {
+    wallet: address,
+    token: grant.token,
+    expiresAt: new Date(grant.expiresAt),
+    chain: input.chainId,
+  }
 }
 
 async function sign(

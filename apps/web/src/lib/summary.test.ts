@@ -1,6 +1,6 @@
 import type { PublisherSummary } from '@contentledger/shared'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, type FeedEvent, type PublisherSource } from './api'
+import { ApiError, type FeedEvent, type FeedSource, type SummarySource } from './api'
 import type { Link } from './follow'
 import {
   followSummary,
@@ -60,7 +60,7 @@ function fakeSource() {
     refuse(error: unknown): void
   }> = []
   let streams = 0
-  const source: PublisherSource = {
+  const source: FeedSource & SummarySource = {
     receipts: async () => ({ items: [], nextCursor: null }),
     stream: (onEvent, signal) => {
       streams += 1

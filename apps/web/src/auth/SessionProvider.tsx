@@ -7,8 +7,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
+import type { TransactionSender } from '@/lib/register'
+import { type SendingAdapter, senderFor } from './send'
 import {
   type AuthApi,
   clearSession,
@@ -34,6 +37,8 @@ interface SessionState {
   /** The wallet a sign-in is waiting on. */
   readonly pending: WalletName | null
   readonly failure: string | null
+  /** Signs and sends as the session's wallet; `null` while signed out. */
+  readonly send: TransactionSender | null
   signIn(name: WalletName): void
   signOut(): void
 }
@@ -58,7 +63,9 @@ export function AuthProvider({ api, children }: { api: AuthApi; children: ReactN
 }
 
 function SessionProvider({ api, children }: { api: AuthApi; children: ReactNode }) {
-  const { wallets, select, publicKey, disconnect } = useWallet()
+  const { wallets, wallet, select, publicKey, disconnect } = useWallet()
+  const selected = useRef<SendingAdapter | null>(null)
+  selected.current = wallet?.adapter ?? null
   const [session, setSession] = useState(() => loadSession(store, new Date()))
   const [pending, setPending] = useState<WalletName | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
@@ -100,9 +107,16 @@ function SessionProvider({ api, children }: { api: AuthApi; children: ReactNode 
     [wallets, select, api],
   )
 
+  const send = useMemo(
+    () =>
+      session === null ? null : senderFor(() => selected.current, session.wallet, session.chain),
+    [session],
+  )
+
   const value = useMemo<SessionState>(
     () => ({
       session,
+      send,
       wallets: wallets.map(({ adapter, readyState }) => ({
         name: adapter.name,
         icon: adapter.icon,
@@ -113,7 +127,7 @@ function SessionProvider({ api, children }: { api: AuthApi; children: ReactNode 
       signIn: (name) => void signIn(name),
       signOut,
     }),
-    [session, wallets, pending, failure, signIn, signOut],
+    [session, send, wallets, pending, failure, signIn, signOut],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

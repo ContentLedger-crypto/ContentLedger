@@ -24,6 +24,7 @@ const session: Session = {
   wallet: WALLET,
   token: 'q3Jx0Vb2s9H_k-4mZp7LwT1nYc8RfAeD6uGiOoXjK5E',
   expiresAt: new Date('2026-10-08T00:00:00.000Z'),
+  chain: 'solana:devnet',
 }
 
 function memoryStore(): SessionStore & { readonly items: Map<string, string> } {
@@ -54,6 +55,8 @@ describe('stored session', () => {
     ['not JSON', '{'],
     ['a token of the wrong shape', JSON.stringify({ ...session, token: 'short' })],
     ['no wallet', JSON.stringify({ token: session.token, expiresAt: session.expiresAt })],
+    // Saved before sessions knew their cluster: signing in again is cheaper than guessing it.
+    ['without its cluster', JSON.stringify({ ...session, chain: undefined })],
   ])('is dropped when it is %s', (_, raw) => {
     const store = memoryStore()
     store.items.set('contentledger.session', raw)

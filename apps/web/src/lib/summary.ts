@@ -1,5 +1,5 @@
 import type { PublisherSummary } from '@contentledger/shared'
-import type { PeriodWindow, PublisherSource } from './api'
+import type { FeedSource, PeriodWindow, SummarySource } from './api'
 import { followStream, type StreamReader, type StreamSink } from './follow'
 
 export type Period = '7d' | '30d' | '12m'
@@ -64,7 +64,7 @@ export interface SummarySink extends StreamSink {
  * than adding the arrival here, so the figures cannot drift from what the ledger holds.
  */
 export function followSummary(
-  source: PublisherSource,
+  source: FeedSource & SummarySource,
   period: Period,
   sink: SummarySink,
   signal: AbortSignal,

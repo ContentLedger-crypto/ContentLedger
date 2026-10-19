@@ -1,4 +1,5 @@
 import type {
+  publisherDomainsSchema,
   publisherReceiptSchema,
   publisherSummarySchema,
   receiptBodySchema,
@@ -291,6 +292,20 @@ export const SUMMARY: z.input<typeof publisherSummarySchema> = {
   ],
   settlement: { inBatch: '3907900', accrued: '55000', perRequest: '284000' },
   registeredWorks: 5,
+}
+
+/** The domain the sample works sit under, at the domain rates the sample batch charges. */
+export const DOMAINS: z.input<typeof publisherDomainsSchema> = {
+  domains: [
+    {
+      address: 'FCACSUUdntxKB1sAqoyvZ6b7EQRGmcwdBY5dkWEdgxME',
+      host: new URL(SITE).hostname,
+      rateTrain: '1500',
+      rateInference: '500',
+      status: 'active',
+      works: Object.keys(WORK).length,
+    },
+  ],
 }
 
 /* ------------------------- /v1/batches: the batch the sample receipt was settled in */

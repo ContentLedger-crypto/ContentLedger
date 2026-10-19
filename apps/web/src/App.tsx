@@ -12,9 +12,11 @@ import {
   sampleSource,
   sampleWallet,
 } from '@/lib/api'
+import type { TransactionSender } from '@/lib/register'
 import { COLOR } from '@/lib/theme'
 import { Ledger } from '@/screens/Ledger'
 import { type ReceiptOpening, ReceiptScreen } from '@/screens/Receipt'
+import { Register } from '@/screens/Register'
 import { Summary } from '@/screens/Summary'
 
 const PREVIEW_NOTICE = 'Preview with sample figures: no gateway is connected to this page.'
@@ -22,7 +24,7 @@ const PREVIEW_NOTICE = 'Preview with sample figures: no gateway is connected to 
 const App = () => (
   <div style={{ background: COLOR.ground, minHeight: '100vh', color: COLOR.ink }}>
     {authApi === null ? (
-      <Dashboard wallet={sampleWallet} source={sampleSource} preview />
+      <Dashboard wallet={sampleWallet} source={sampleSource} send={null} chain="" preview />
     ) : (
       <AuthProvider api={authApi}>
         <SignedIn />
@@ -32,7 +34,7 @@ const App = () => (
 )
 
 function SignedIn() {
-  const { session, signOut } = useSession()
+  const { session, send, signOut } = useSession()
   const token = session?.token ?? null
   const source = useMemo(
     () =>
@@ -42,17 +44,31 @@ function SignedIn() {
     [token],
   )
   if (session === null || source === null) return <SignIn />
-  return <Dashboard wallet={session.wallet} source={source} preview={false} onSignOut={signOut} />
+  return (
+    <Dashboard
+      wallet={session.wallet}
+      source={source}
+      send={send}
+      chain={session.chain}
+      preview={false}
+      onSignOut={signOut}
+    />
+  )
 }
 
 function Dashboard({
   wallet,
   source,
+  send,
+  chain,
   preview,
   onSignOut,
 }: {
   wallet: string
   source: PublisherSource
+  /** `null` in the preview, which has no wallet to sign registrations with. */
+  send: TransactionSender | null
+  chain: string
   /** Sample figures throughout; otherwise everything is this wallet's. */
   preview: boolean
   onSignOut?: () => void
@@ -84,6 +100,9 @@ function Dashboard({
         />
       )}
       {view === 'summary' && <Summary source={source} onUnauthorized={onSignOut} />}
+      {view === 'register' && (
+        <Register source={source} send={send} chain={chain} onUnauthorized={onSignOut} />
+      )}
       {view === 'receipt' && opening !== null && (
         <ReceiptScreen
           opening={opening}

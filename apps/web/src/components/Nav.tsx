@@ -1,11 +1,12 @@
 import { Column } from '@/components/Primitives'
 import { COLOR } from '@/lib/theme'
 
-export type ViewName = 'ledger' | 'summary' | 'receipt'
+export type ViewName = 'ledger' | 'summary' | 'register' | 'receipt'
 
-const ITEMS: readonly { readonly id: 'ledger' | 'summary'; readonly label: string }[] = [
+const ITEMS: readonly { readonly id: Exclude<ViewName, 'receipt'>; readonly label: string }[] = [
   { id: 'ledger', label: 'Ledger' },
   { id: 'summary', label: 'Summary' },
+  { id: 'register', label: 'Register' },
 ]
 
 export function Nav({
