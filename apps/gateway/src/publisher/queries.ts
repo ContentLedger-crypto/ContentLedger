@@ -1,6 +1,6 @@
 import { acceptedAtColumns, domains, receipts, works } from '@contentledger/db'
 import type { publisherReceiptSchema, publisherSummarySchema } from '@contentledger/shared'
-import { and, asc, desc, eq, gte, lt, type SQL, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, lt, type SQL, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import type { SessionWallet } from '../routes/auth.js'
 import type { Database } from '../store.js'
@@ -179,6 +179,16 @@ function add<T extends Tally>(tallies: Map<string, T>, key: string, cell: Tally,
 }
 
 const compare = <T extends string | bigint>(a: T, b: T) => (a < b ? -1 : a > b ? 1 : 0)
+
+/** Sources the mirror knows: only works that have been served at least once. */
+export async function sourcesOf(db: Database, ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map()
+  const rows = await db
+    .select({ id: works.id, sourceId: works.sourceId })
+    .from(works)
+    .where(inArray(works.id, ids))
+  return new Map(rows.map(({ id, sourceId }) => [id, sourceId]))
+}
 
 export type ReceiptItem = Awaited<ReturnType<typeof listReceipts>>['items'][number]
 

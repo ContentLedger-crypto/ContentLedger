@@ -78,7 +78,11 @@ beforeEach(async () => {
       db,
       now: () => new Date(),
       dashboardOrigin: DASHBOARD,
-      registry: { countWorks: async () => 0, ownedDomains: async () => [] },
+      registry: {
+        countWorks: async () => 0,
+        ownedDomains: async () => [],
+        ownedWorks: async () => [],
+      },
       registration: {
         chain: {
           getMultipleAccountsInfo: async () => [],

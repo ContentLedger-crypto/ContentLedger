@@ -125,9 +125,15 @@ export interface OwnedDomain {
   works: number
 }
 
+export interface OwnedWork {
+  address: string
+  account: Work
+}
+
 export interface OwnedWorksReader {
   countWorks(owner: string): Promise<number>
   ownedDomains(owner: string): Promise<OwnedDomain[]>
+  ownedWorks(owner: string): Promise<OwnedWork[]>
 }
 
 interface ProgramAccountsReader {
@@ -177,6 +183,20 @@ export function rpcOwnedWorks(connection: ProgramAccountsReader): OwnedWorksRead
         })),
       )
       return owned.sort((a, b) => (a.account.host < b.account.host ? -1 : 1))
+    },
+
+    async ownedWorks(owner) {
+      const domains = await addresses('Domain', owner)
+      const works = await Promise.all(
+        domains.map(({ pubkey }) => accounts('Work', pubkey.toBase58(), true)),
+      )
+      return works
+        .flat()
+        .map(({ pubkey, account }) => ({
+          address: pubkey.toBase58(),
+          account: decodeWork(account.data),
+        }))
+        .sort((a, b) => (a.address < b.address ? -1 : 1))
     },
   }
 }

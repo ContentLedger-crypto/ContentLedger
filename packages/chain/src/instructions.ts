@@ -164,10 +164,13 @@ const updateDomainKeys = (owner: PublicKey, host: string): AccountMetaLike[] => 
   { pubkey: domainPda(host)[0], isWritable: true },
 ]
 
-const updateWorkKeys = (owner: PublicKey, host: string, source: string): AccountMetaLike[] => [
+/** The chain keeps only a hash of the source, so a work read back from it is known by address. */
+export type WorkRef = { source: string } | { work: PublicKey }
+
+const updateWorkKeys = (owner: PublicKey, host: string, ref: WorkRef): AccountMetaLike[] => [
   { pubkey: owner, isSigner: true },
   { pubkey: domainPda(host)[0] },
-  { pubkey: workPda(source)[0], isWritable: true },
+  { pubkey: 'work' in ref ? ref.work : workPda(ref.source)[0], isWritable: true },
 ]
 
 export function buildSetDomainRates(args: {
@@ -195,30 +198,32 @@ export function buildSetDomainStatus(args: {
   )
 }
 
-export function buildSetWorkRates(args: {
-  owner: PublicKey
-  host: string
-  source: string
-  rateTrain: bigint | null
-  rateInference: bigint | null
-}): TransactionInstruction {
+export function buildSetWorkRates(
+  args: {
+    owner: PublicKey
+    host: string
+    rateTrain: bigint | null
+    rateInference: bigint | null
+  } & WorkRef,
+): TransactionInstruction {
   return build(
     'set_work_rates',
     { rate_train: optionalU64(args.rateTrain), rate_inference: optionalU64(args.rateInference) },
-    updateWorkKeys(args.owner, args.host, args.source),
+    updateWorkKeys(args.owner, args.host, args),
   )
 }
 
-export function buildSetWorkStatus(args: {
-  owner: PublicKey
-  host: string
-  source: string
-  status: LicenceStatus
-}): TransactionInstruction {
+export function buildSetWorkStatus(
+  args: {
+    owner: PublicKey
+    host: string
+    status: LicenceStatus
+  } & WorkRef,
+): TransactionInstruction {
   return build(
     'set_work_status',
     { status: status(args.status) },
-    updateWorkKeys(args.owner, args.host, args.source),
+    updateWorkKeys(args.owner, args.host, args),
   )
 }
 

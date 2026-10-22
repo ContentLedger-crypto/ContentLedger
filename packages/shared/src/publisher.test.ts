@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  changeRequestSchema,
   preparedRegistrationSchema,
   publisherDomainsSchema,
   publisherReceiptSchema,
   publisherSummarySchema,
+  publisherWorksSchema,
   receiptsPageSchema,
   registrationRequestSchema,
   registrationStatusSchema,
@@ -287,5 +289,97 @@ describe('registration', () => {
       ],
     })
     expect(listing.domains[0]).toMatchObject({ rateTrain: 2000n, status: 'suspended', works: 0 })
+  })
+})
+
+describe('changes', () => {
+  const DOMAIN = 'BUHqsiLM6HyUEKrdVAtWQ1KG9K9oKJJAJXjUv3fFmHLp'
+  const WORK = 'Kzb7q9Np5Zr9QBo7iafi2yCBisiHJg7r7HezzgvbuQ2T'
+
+  it('reads a domain change with both rates and the status it should end with', () => {
+    expect(
+      changeRequestSchema.parse({
+        kind: 'domain',
+        domain: DOMAIN,
+        rateTrain: '3000',
+        rateInference: '0',
+        status: 'suspended',
+      }),
+    ).toEqual({
+      kind: 'domain',
+      domain: DOMAIN,
+      rateTrain: 3000n,
+      rateInference: 0n,
+      status: 'suspended',
+    })
+  })
+
+  it('keeps a work going back to the domain rate distinct from a free one', () => {
+    const change = changeRequestSchema.parse({
+      kind: 'work',
+      work: WORK,
+      rateTrain: null,
+      rateInference: '0',
+      status: 'active',
+    })
+    expect(change).toMatchObject({ rateTrain: null, rateInference: 0n })
+  })
+
+  it('rejects a partial change, since an absent field cannot say "leave it" apart from "clear it"', () => {
+    for (const body of [
+      { kind: 'work', work: WORK, rateTrain: null, rateInference: null },
+      { kind: 'work', work: WORK, rateTrain: null, status: 'active' },
+      { kind: 'domain', domain: DOMAIN, rateTrain: null, rateInference: '0', status: 'active' },
+    ]) {
+      expect(changeRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false)
+    }
+  })
+
+  it('rejects a host or source in place of an address, an extra field and an unknown status', () => {
+    for (const body of [
+      {
+        kind: 'domain',
+        domain: 'tide-notes.test',
+        rateTrain: '1',
+        rateInference: '1',
+        status: 'active',
+      },
+      {
+        kind: 'domain',
+        domain: DOMAIN,
+        rateTrain: '1',
+        rateInference: '1',
+        status: 'active',
+        owner: WORK,
+      },
+      { kind: 'work', work: WORK, rateTrain: null, rateInference: null, status: 'paused' },
+    ]) {
+      expect(changeRequestSchema.safeParse(body).success, JSON.stringify(body)).toBe(false)
+    }
+  })
+
+  it("lists a wallet's works with their own rates, and a source only where one is known", () => {
+    const listing = publisherWorksSchema.parse({
+      works: [
+        {
+          address: WORK,
+          domain: DOMAIN,
+          source: 'https://tide-notes.test/2026/neap-tides.html',
+          rateTrain: '2500',
+          rateInference: null,
+          status: 'active',
+        },
+        {
+          address: DOMAIN,
+          domain: DOMAIN,
+          source: null,
+          rateTrain: null,
+          rateInference: null,
+          status: 'suspended',
+        },
+      ],
+    })
+    expect(listing.works[0]).toMatchObject({ rateTrain: 2500n, rateInference: null })
+    expect(listing.works[1]?.source).toBeNull()
   })
 })

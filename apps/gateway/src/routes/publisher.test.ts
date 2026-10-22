@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { domainPda, PROGRAM_ID } from '@contentledger/chain'
+import { coder, domainPda, PROGRAM_ID } from '@contentledger/chain'
 import {
   acceptedAtColumns,
   domains,
@@ -12,9 +12,11 @@ import {
   preparedRegistrationSchema,
   publisherDomainsSchema,
   publisherSummarySchema,
+  publisherWorksSchema,
   receiptsPageSchema,
   registrationStatusSchema,
 } from '@contentledger/shared'
+import { BN } from '@coral-xyz/anchor'
 import { PGlite } from '@electric-sql/pglite'
 import { type AccountInfo, PublicKey, type SignatureStatus, Transaction } from '@solana/web3.js'
 import { sql } from 'drizzle-orm'
@@ -101,7 +103,7 @@ beforeEach(async () => {
   await db.execute(sql`truncate receipts, works, domains, sessions cascade`)
   refuse = false
   nextReceipt = 0
-  registry = { countWorks: async () => 2, ownedDomains: async () => [] }
+  registry = { countWorks: async () => 2, ownedDomains: async () => [], ownedWorks: async () => [] }
   chainState = { accounts: new Map(), statuses: [null], height: 100 }
   await db.insert(sessions).values(
     [ALICE, BOB].map((wallet) => ({
@@ -567,5 +569,139 @@ describe('registration routes', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(DASHBOARD)
     expect(res.headers.get('Access-Control-Allow-Methods')).toContain('POST')
     expect(res.headers.get('Access-Control-Allow-Headers')?.toLowerCase()).toContain('content-type')
+  })
+})
+
+describe('change routes', () => {
+  const post = (body: unknown, wallet?: string) =>
+    createApp(publisherRoutes(deps())).request('/v1/publisher/changes', {
+      method: 'POST',
+      headers: {
+        Origin: DASHBOARD,
+        'Content-Type': 'application/json',
+        ...(wallet === undefined ? {} : { Authorization: `Bearer ${TOKENS[wallet]}` }),
+      },
+      body: JSON.stringify(body),
+    })
+
+  const DOMAIN = domainPda('alice.test')[0].toBase58()
+  const domainBody = {
+    kind: 'domain',
+    domain: DOMAIN,
+    rateTrain: '3000',
+    rateInference: '500',
+    status: 'active',
+  }
+
+  const onChain = async (owner: string) =>
+    chainState.accounts.set(DOMAIN, {
+      data: await coder.accounts.encode('Domain', {
+        owner: new PublicKey(owner),
+        payout_owner: new PublicKey(owner),
+        host: 'alice.test',
+        rate_train: new BN(2000),
+        rate_inference: new BN(500),
+        status: { Active: {} },
+        bump: 254,
+        reserved: Array(32).fill(0),
+      }),
+      executable: false,
+      lamports: 1,
+      owner: PROGRAM_ID,
+      rentEpoch: 0,
+    })
+
+  const chainWork = (address: string, rateTrain: bigint | null) => ({
+    address,
+    account: {
+      domain: DOMAIN,
+      sourceHash: '00'.repeat(32),
+      contentHash: '22'.repeat(32),
+      rateTrain,
+      rateInference: null,
+      status: 'suspended' as const,
+      attestedBy: 0,
+      bump: 253,
+    },
+  })
+
+  it("lists the session wallet's works from the chain, named from the mirror where it can be", async () => {
+    const asked: string[] = []
+    registry = {
+      ...registry,
+      ownedWorks: async (owner) => {
+        asked.push(owner)
+        // key(12) is in the mirror under alice.test; key(13) has never been served.
+        return [chainWork(key(12), HUGE), chainWork(key(13), null)]
+      },
+    }
+    const res = await get('/v1/publisher/works', ALICE)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(publisherWorksSchema.safeParse(body).success).toBe(true)
+    expect(body).toEqual({
+      works: [
+        {
+          address: key(12),
+          domain: DOMAIN,
+          source: 'https://alice.test/b',
+          rateTrain: HUGE.toString(),
+          rateInference: null,
+          status: 'suspended',
+        },
+        {
+          address: key(13),
+          domain: DOMAIN,
+          source: null,
+          rateTrain: null,
+          rateInference: null,
+          status: 'suspended',
+        },
+      ],
+    })
+    expect(asked).toEqual([ALICE])
+  })
+
+  it('lists no works for a wallet that has none', async () => {
+    const res = await get('/v1/publisher/works', ALICE)
+    expect(await res.json()).toEqual({ works: [] })
+  })
+
+  it('prepares a change for the session wallet to sign', async () => {
+    await onChain(ALICE)
+    const res = await post(domainBody, ALICE)
+    expect(res.status).toBe(200)
+    const prepared = preparedRegistrationSchema.parse(await res.json())
+    expect(prepared.address).toBe(DOMAIN)
+    const tx = Transaction.from(Buffer.from(prepared.transaction, 'base64'))
+    expect(tx.feePayer?.toBase58()).toBe(ALICE)
+  })
+
+  it('names the reason a change is refused', async () => {
+    await onChain(ALICE)
+    const res = await post(domainBody, BOB)
+    expect(res.status).toBe(422)
+    expect(await res.json()).toEqual({
+      error: {
+        code: 'CHANGE_REFUSED',
+        message: 'change refused',
+        details: { reason: 'not-yours' },
+      },
+    })
+  })
+
+  it('rejects a malformed body and an unknown field with 400', async () => {
+    for (const res of [
+      await post({ ...domainBody, status: undefined }, ALICE),
+      await post({ ...domainBody, host: 'alice.test' }, ALICE),
+    ]) {
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ error: { code: 'INVALID_INPUT' } })
+    }
+  })
+
+  it('requires a session for every change route', async () => {
+    expect((await get('/v1/publisher/works')).status).toBe(401)
+    expect((await post(domainBody)).status).toBe(401)
   })
 })

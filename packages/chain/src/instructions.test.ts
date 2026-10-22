@@ -207,6 +207,25 @@ describe('склад акаунтів', () => {
     expect(keys[3]).toBe(workPda(SOURCE)[0].toBase58())
   })
 
+  it('a work change takes the work by address as well as by source, to the same accounts', () => {
+    const work = workPda(SOURCE)[0]
+    const bySource = [
+      buildSetWorkRates({ owner, host: HOST, source: SOURCE, rateTrain: 1n, rateInference: null }),
+      buildSetWorkStatus({ owner, host: HOST, source: SOURCE, status: 'suspended' }),
+    ]
+    const byAddress = [
+      buildSetWorkRates({ owner, host: HOST, work, rateTrain: 1n, rateInference: null }),
+      buildSetWorkStatus({ owner, host: HOST, work, status: 'suspended' }),
+    ]
+    expect(byAddress.map((ix) => ix.keys)).toEqual(bySource.map((ix) => ix.keys))
+    expect(byAddress.map((ix) => ix.data)).toEqual(bySource.map((ix) => ix.data))
+    expect(byAddress[0]?.keys.map((key) => key.pubkey.toBase58())).toEqual([
+      owner.toBase58(),
+      domainPda(HOST)[0].toBase58(),
+      work.toBase58(),
+    ])
+  })
+
   it('платник і власник — єдині підписанти', () => {
     const instruction = buildRegisterDomain({
       payer: authority,

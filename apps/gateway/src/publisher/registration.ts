@@ -51,7 +51,7 @@ const refuse = (reason: RegistrationRefusal): Preparation => ({ ok: false, reaso
 
 // Anyone can send lamports to a PDA before it is created; that leaves a system-owned
 // account the program's `init` still takes over, so it is not a registration.
-const isRegistered = (info: AccountInfo<Buffer> | null | undefined) =>
+export const isRegistered = (info: AccountInfo<Buffer> | null | undefined) =>
   info?.owner.equals(PROGRAM_ID) === true
 
 /**
@@ -122,12 +122,12 @@ export async function prepareRegistration(
   return assemble(chain, payer, address, instructions)
 }
 
-async function assemble(
+export async function assemble(
   chain: RegistrationChain,
   payer: PublicKey,
   address: PublicKey,
   instructions: TransactionInstruction[],
-): Promise<Preparation> {
+): Promise<{ ok: true; prepared: PreparedRegistration }> {
   const { blockhash, lastValidBlockHeight } = await chain.getLatestBlockhash('confirmed')
   const transaction = new Transaction({ feePayer: payer, blockhash, lastValidBlockHeight }).add(
     ...instructions,

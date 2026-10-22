@@ -1,7 +1,9 @@
 import {
   base58SignatureSchema,
+  changeRequestSchema,
   type preparedRegistrationSchema,
   type publisherDomainsSchema,
+  type publisherWorksSchema,
   type receiptsPageSchema,
   registrationRequestSchema,
   type registrationStatusSchema,
@@ -12,11 +14,13 @@ import { z } from 'zod'
 import { redactKeys } from '../app.js'
 import { apiError, errorChain } from '../errors.js'
 import type { ContentOrigin } from '../origin.js'
+import { prepareChange } from '../publisher/changes.js'
 import type { Feed } from '../publisher/feed.js'
 import {
   listReceipts,
   receiptJson,
   receiptsParams,
+  sourcesOf,
   summarize,
   summaryJson,
   summaryParams,
@@ -122,6 +126,42 @@ export function publisherRoutes({
         works,
       })),
     } satisfies z.input<typeof publisherDomainsSchema>)
+  })
+
+  app.get('/v1/publisher/works', session, async (c) => {
+    const owned = await registry.ownedWorks(c.get('wallet'))
+    const sources = await sourcesOf(
+      db,
+      owned.map(({ address }) => address),
+    )
+    return c.json({
+      works: owned.map(({ address, account }) => ({
+        address,
+        domain: account.domain,
+        source: sources.get(address) ?? null,
+        rateTrain: account.rateTrain?.toString() ?? null,
+        rateInference: account.rateInference?.toString() ?? null,
+        status: account.status,
+      })),
+    } satisfies z.input<typeof publisherWorksSchema>)
+  })
+
+  // Signed transactions are followed by GET /registrations/:signature: a change lands or
+  // fails the same way a registration does.
+  app.post('/v1/publisher/changes', session, async (c) => {
+    const body = changeRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) {
+      return c.json(
+        apiError('INVALID_INPUT', 'invalid body', { issues: z.flattenError(body.error) }),
+        400,
+      )
+    }
+
+    const result = await prepareChange(c.get('wallet'), body.data, registration.chain)
+    if (!result.ok) {
+      return c.json(apiError('CHANGE_REFUSED', 'change refused', { reason: result.reason }), 422)
+    }
+    return c.json(result.prepared satisfies z.input<typeof preparedRegistrationSchema>)
   })
 
   app.post('/v1/publisher/registrations', session, async (c) => {

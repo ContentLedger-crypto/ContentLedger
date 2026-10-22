@@ -348,6 +348,33 @@ describe('rpcOwnedWorks', () => {
     expect(bob.map(({ account }) => account.host)).toEqual(['bob.test'])
   })
 
+  it("lists every work under the wallet's domains, read whole, by address", async () => {
+    const rpc = cluster(await registry())
+    const owned = await rpcOwnedWorks(rpc).ownedWorks(ALICE.toBase58())
+    expect(owned.map(({ address }) => address)).toEqual(
+      [key(51), key(52), key(53)].map((k) => k.toBase58()).sort(),
+    )
+    expect(owned.find(({ address }) => address === key(53).toBase58())?.account).toMatchObject({
+      domain: domainPda('alice.org')[0].toBase58(),
+      rateTrain: null,
+      status: 'suspended',
+    })
+    const [domains, ...works] = rpc.calls
+    expect(domains).toMatchObject({ commitment: 'confirmed', dataSlice: { length: 0 } })
+    expect(works).toHaveLength(2)
+    for (const call of works) {
+      expect(call).toMatchObject({ commitment: 'confirmed' })
+      expect(call.dataSlice).toBeUndefined()
+    }
+  })
+
+  it('lists no work for a wallet that is only somebody else’s payout', async () => {
+    const rpc = cluster(await registry())
+    expect(await rpcOwnedWorks(rpc).ownedWorks(key(43).toBase58())).toEqual([])
+    const bob = await rpcOwnedWorks(rpc).ownedWorks(BOB.toBase58())
+    expect(bob.map(({ address }) => address)).toEqual([key(54).toBase58()])
+  })
+
   it('reads whole domains but only the addresses of works', async () => {
     const rpc = cluster(await registry())
     await rpcOwnedWorks(rpc).ownedDomains(ALICE.toBase58())

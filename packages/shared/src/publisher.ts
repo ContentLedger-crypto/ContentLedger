@@ -129,6 +129,40 @@ export const registrationStatusSchema = z.discriminatedUnion('state', [
   }),
 ])
 
+export const publisherWorksSchema = z.object({
+  works: z.array(
+    z.object({
+      address: base58KeySchema,
+      domain: base58KeySchema,
+      /** The chain keeps only a hash of it; `null` until the work has been served once. */
+      source: z.string().nullable(),
+      rateTrain: usdcAmountSchema.nullable(),
+      rateInference: usdcAmountSchema.nullable(),
+      status: licenceStatusSchema,
+    }),
+  ),
+})
+
+/** The state the account should end with: an absent field could not tell "leave it" from "clear it". */
+export const changeRequestSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('domain'),
+    domain: base58KeySchema,
+    rateTrain: usdcAmountSchema,
+    rateInference: usdcAmountSchema,
+    status: licenceStatusSchema,
+  }),
+  z.strictObject({
+    kind: z.literal('work'),
+    work: base58KeySchema,
+    rateTrain: usdcAmountSchema.nullable(),
+    rateInference: usdcAmountSchema.nullable(),
+    status: licenceStatusSchema,
+  }),
+])
+
+export const changeRefusalSchema = z.enum(['not-registered', 'not-yours', 'unchanged'])
+
 export type PublisherReceipt = z.output<typeof publisherReceiptSchema>
 export type ReceiptsPage = z.output<typeof receiptsPageSchema>
 export type PublisherSummary = z.output<typeof publisherSummarySchema>
@@ -138,3 +172,6 @@ export type RegistrationRequest = z.output<typeof registrationRequestSchema>
 export type RegistrationRefusal = z.output<typeof registrationRefusalSchema>
 export type PreparedRegistration = z.output<typeof preparedRegistrationSchema>
 export type RegistrationStatus = z.output<typeof registrationStatusSchema>
+export type PublisherWorks = z.output<typeof publisherWorksSchema>
+export type ChangeRequest = z.output<typeof changeRequestSchema>
+export type ChangeRefusal = z.output<typeof changeRefusalSchema>
